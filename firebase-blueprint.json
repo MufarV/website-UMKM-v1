@@ -1,0 +1,181 @@
+{
+  "entities": {
+    "transactions": {
+      "title": "Transaksi Keuangan",
+      "description": "Log pamasukan dan pengeluaran UMKM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "category": { "type": "string" }
+      },
+      "required": ["date", "amount", "type"]
+    },
+    "inventory": {
+      "title": "Inventaris Barang",
+      "description": "Manajemen stok bahan baku dan produk jadi.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "stock": { "type": "number" },
+        "unit": { "type": "string" },
+        "minStock": { "type": "number" },
+        "price": { "type": "number" }
+      },
+      "required": ["name", "stock", "unit"]
+    },
+    "assets": {
+      "title": "Sarana & Prasarana",
+      "description": "Aset fisik bisnis dan kondisi pemeliharaannya.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "maintenance", "retired"] },
+        "lastMaintenance": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["name", "status"]
+    },
+    "accounts": {
+      "title": "Daftar Akun (COA)",
+      "description": "Bagan akun untuk pembukuan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Asset", "Liability", "Equity", "Revenue", "Expense"] },
+        "balance": { "type": "number" }
+      },
+      "required": ["code", "name", "type"]
+    },
+    "journal_entries": {
+      "title": "Jurnal Umum",
+      "description": "Log transaksi akuntansi double-entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "items": { "type": "array" }
+      },
+      "required": ["date", "description", "items"]
+    },
+    "employees": {
+      "title": "Data Karyawan",
+      "description": "Daftar staf atau karyawan UMKM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "On Leave", "Inactive"] },
+        "email": { "type": "string" }
+      },
+      "required": ["name", "role", "status"]
+    },
+    "tasks": {
+      "title": "Manajemen Tugas",
+      "description": "Tugas atau pekerjaan yang didelegasikan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "status": { "type": "string", "enum": ["Todo", "In Progress", "Done"] },
+        "deadline": { "type": "string", "format": "date" }
+      },
+      "required": ["title", "status"]
+    },
+    "projects": {
+      "title": "Manajemen Proyek",
+      "description": "Proyek besar yang memiliki beberapa tugas.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Completed", "On Hold"] },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" }
+      },
+      "required": ["name", "status"]
+    },
+    "planning": {
+      "title": "Perencanaan Bisnis (Planning)",
+      "description": "Dokumen perencanaan strategis POAC.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vision": { "type": "string" },
+        "mission": { "type": "string" },
+        "financialTargets": { "type": "array" },
+        "nonFinancialTargets": { "type": "array" },
+        "swot": { "type": "object" },
+        "strategies": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "divisions": {
+      "title": "Divisi Organisasi",
+      "description": "Daftar divisi dalam struktur organisasi.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "employeeIds": { "type": "array" }
+      },
+      "required": ["name"]
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "transactions",
+      "description": "Koleksi data transaksi keuangan."
+    },
+    "/inventory/{itemId}": {
+      "schema": "inventory",
+      "description": "Koleksi data inventaris barang."
+    },
+    "/assets/{assetId}": {
+      "schema": "assets",
+      "description": "Koleksi data aset fisik UMKM."
+    },
+    "/accounts/{accountId}": {
+      "schema": "accounts",
+      "description": "Koleksi bagan akun."
+    },
+    "/journal_entries/{entryId}": {
+      "schema": "journal_entries",
+      "description": "Koleksi jurnal umum."
+    },
+    "/employees/{employeeId}": {
+      "schema": "employees",
+      "description": "Koleksi data karyawan."
+    },
+    "/tasks/{taskId}": {
+      "schema": "tasks",
+      "description": "Koleksi tugas dan proyek."
+    },
+    "/projects/{projectId}": {
+      "schema": "projects",
+      "description": "Koleksi proyek utama."
+    },
+    "/planning/{planningId}": {
+      "schema": "planning",
+      "description": "Koleksi data perencanaan strategis."
+    },
+    "/divisions/{divisionId}": {
+      "schema": "divisions",
+      "description": "Koleksi data divisi organisasi."
+    }
+  }
+}
