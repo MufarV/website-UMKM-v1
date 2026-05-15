@@ -39,8 +39,8 @@ export const DigitalView = () => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 600;
-          const MAX_HEIGHT = 600;
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
           let width = img.width;
           let height = img.height;
           if (width > height) {
@@ -52,7 +52,7 @@ export const DigitalView = () => {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          const base64 = canvas.toDataURL('image/jpeg', 0.9);
           
           setSettings({ ...settings, bestSellerImage: base64 });
           if (bestSellerInputRef.current) bestSellerInputRef.current.value = '';
@@ -72,8 +72,8 @@ export const DigitalView = () => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 300;
-          const MAX_HEIGHT = 300;
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
           let width = img.width;
           let height = img.height;
           if (width > height) {
@@ -85,7 +85,7 @@ export const DigitalView = () => {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          const base64 = canvas.toDataURL('image/jpeg', 0.9);
           
           const newReviews = [...(settings.reviews || [])];
           newReviews[idx] = { ...newReviews[idx], image: base64 };
@@ -109,8 +109,8 @@ export const DigitalView = () => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 300;
-          const MAX_HEIGHT = 300;
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
           let width = img.width;
           let height = img.height;
           if (width > height) {
@@ -122,7 +122,7 @@ export const DigitalView = () => {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          const base64 = canvas.toDataURL('image/jpeg', 0.9);
           
           const newProducts = [...(settings.products || [])];
           let prod = newProducts[prodIdx];
@@ -159,7 +159,11 @@ export const DigitalView = () => {
           openTime: '10:00',
           closeTime: '20:00',
           menerimaPesanan: true,
-          openPoDates: []
+          openPoDates: [],
+          heroText: 'Jajanan Cilok Estetik & Lezat untuk Harimu!',
+          whatsappNumber: '',
+          instagramLink: '',
+          bestSellerImage: ''
         });
       }
     });
@@ -336,8 +340,11 @@ export const DigitalView = () => {
                                 <input
                                   type="number"
                                   placeholder="0"
-                                  value={opt.price || ''}
-                                  onChange={(e) => updateOptionPrice(idx, optIdx, parseInt(e.target.value) || 0)}
+                                  value={opt.price === 0 && opt.price !== undefined ? '' : opt.price}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateOptionPrice(idx, optIdx, val === '' ? 0 : parseInt(val));
+                                  }}
                                   className="w-24 bg-white border border-slate-200 rounded px-2 py-0.5 text-xs font-bold outline-none focus:border-indigo-500"
                                 />
                               </div>
@@ -509,11 +516,12 @@ export const DigitalView = () => {
                                      type="number"
                                      placeholder="∞"
                                      className="w-full bg-transparent py-2.5 text-sm font-bold outline-none text-slate-700 placeholder:text-slate-300"
-                                     value={dateConfig.limits?.[idx] === undefined ? '' : dateConfig.limits[idx]}
+                                     value={dateConfig.limits?.[idx] === 0 ? '' : dateConfig.limits?.[idx]}
                                      onChange={(e) => {
+                                       const val = e.target.value;
                                        const newConfig = { ...(settings.poDatesConfig || {}) };
                                        if (!newConfig[dateStr]) newConfig[dateStr] = { times: [...dateConfig.times], limits: [...dateConfig.limits] };
-                                       newConfig[dateStr].limits[idx] = parseInt(e.target.value) || 0;
+                                       newConfig[dateStr].limits[idx] = val === '' ? 0 : parseInt(val);
                                        setSettings({ ...settings, poDatesConfig: newConfig });
                                      }}
                                    />
@@ -649,28 +657,32 @@ export const DigitalView = () => {
             <div className="space-y-4">
                <label className="text-xs font-black text-slate-400 uppercase tracking-wider block mb-2">Foto Terlaris (Hero Image)</label>
                <input type="file" accept="image/*" ref={bestSellerInputRef} className="hidden" onChange={handleBestSellerImageUpload} />
-               <button
-                 onClick={() => bestSellerInputRef.current?.click()}
-                 className="w-full md:w-3/4 aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 hover:border-indigo-400 hover:bg-indigo-50 transition-colors group relative overflow-hidden"
-               >
-                 {settings.bestSellerImage ? (
-                   <>
-                     <img src={settings.bestSellerImage} alt="Foto Terlaris" className="w-full h-full object-cover" />
-                     <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                       <ImageIcon className="w-8 h-8 text-white mb-2" />
-                       <span className="text-sm font-bold text-white">Ubah Foto</span>
-                     </div>
-                   </>
-                 ) : (
-                   <>
-                     <div className="w-16 h-16 bg-white shadow-sm rounded-full flex items-center justify-center text-slate-400 group-hover:text-indigo-500 transition-colors">
-                       <ImageIcon className="w-6 h-6" />
-                     </div>
-                     <span className="text-sm font-bold text-slate-500 group-hover:text-indigo-600 transition-colors">Upload Foto Utama</span>
-                     <span className="text-xs text-slate-400 px-8 text-center">Gambar menarik ini akan ditampilkan di bagian paling atas situs pemesanan Anda.</span>
-                   </>
-                 )}
-               </button>
+                <button
+                  onClick={() => bestSellerInputRef.current?.click()}
+                  className="w-full aspect-[4/3] bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 hover:border-indigo-400 hover:bg-slate-100 transition-all group relative overflow-hidden shadow-inner"
+                >
+                  {settings.bestSellerImage ? (
+                    <>
+                      <img src={settings.bestSellerImage} alt="Foto Terlaris" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                        <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-3 border border-white/30">
+                          <ImageIcon className="w-6 h-6 text-white" />
+                        </div>
+                        <span className="text-xs font-black text-white uppercase tracking-widest">Ganti Foto Utama</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-20 h-20 bg-white shadow-xl shadow-slate-200/50 rounded-full flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-all group-hover:scale-110 duration-300">
+                        <ImageIcon className="w-8 h-8" />
+                      </div>
+                      <div className="text-center px-8">
+                        <span className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors block mb-1">Upload Hero Banner</span>
+                        <span className="text-[10px] text-slate-400 font-medium leading-relaxed">Format landscape 4:3 disarankan untuk hasil terbaik di website.</span>
+                      </div>
+                    </>
+                  )}
+                </button>
             </div>
           </div>
         </div>

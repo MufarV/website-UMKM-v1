@@ -87,9 +87,25 @@ export const PesananView = () => {
   };
 
   const generateSnippet = () => {
-    const uid = auth.currentUser?.uid || 'USER_ID_ANDA';
-    return `<script>
-// Fungsi untuk mengecek apakah toko sedang buka atau tutup
+    const uid = auth.currentUser?.uid;
+    
+    if (!uid) {
+      return `<!-- PESAN: SILAKAN LOGIN KE DASHBOARD TERLEBIH DAHULU UNTUK MENDAPATKAN ID INTEGRASI ANDA -->`;
+    }
+
+    const snippet = `<script>
+/**
+ * SISTEM INTEGRASI OTOMATIS DASHBOARD PEMESANAN
+ * Copy-paste kode ini ke website pemesanan Anda.
+ */
+
+// 1. Inisialisasi otomatis data saat halaman dimuat
+window.addEventListener('DOMContentLoaded', () => {
+    loadKatalogMenu();
+    loadReviews();
+});
+
+// Fungsi untuk mengecek status buka/tutup toko
 async function cekBukaToko() {
   try {
     const res = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
@@ -97,7 +113,7 @@ async function cekBukaToko() {
       const data = await res.json();
       const fields = data.fields;
       if (fields) {
-        const isBuka = fields.menerimaPesanan?.booleanValue !== false; // default true
+        const isBuka = fields.menerimaPesanan?.booleanValue !== false;
         const openTime = fields.openTime?.stringValue || "00:00";
         const closeTime = fields.closeTime?.stringValue || "23:59";
         
@@ -122,272 +138,168 @@ async function cekBukaToko() {
   } catch (e) {
     console.error("Gagal cek status toko:", e);
   }
-  return true; // Jika gagal cek, default biarkan lewat
+  return true;
 }
 
-// Panggil fungsi ini untuk memuat menu (harga dan foto) langsung dari Dashboard
+// Fungsi memuat menu & harga langsung dari Dashboard
 async function loadKatalogMenu() {
   try {
     const res = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
     if (res.ok) {
       const data = await res.json();
-      const fields = data.fields;
-      if (fields) {
-        // --- 1. SETTINGS TEKS DAN KONTAK ---
-        const heroText = fields.heroText?.stringValue || '';
-        const waNumber = fields.whatsappNumber?.stringValue || '';
-        const igLink = fields.instagramLink?.stringValue || '';
-        const bestSellerImg = fields.bestSellerImage?.stringValue || '';
+      const fields = data.fields || {};
+      
+      // Update Text Hero & Kontak
+      const heroText = fields.heroText?.stringValue || '';
+      const waNumber = fields.whatsappNumber?.stringValue || '';
+      const igLink = fields.instagramLink?.stringValue || '';
+      const bestSellerImg = fields.bestSellerImage?.stringValue || '';
 
-        const elHero = document.getElementById('hero_text');
-        if (elHero && heroText) elHero.innerText = heroText;
+      const elHero = document.getElementById('hero_text');
+      if (elHero && heroText) elHero.innerText = heroText;
 
-        const elBestSeller = document.getElementById('best_seller_image');
-        if (elBestSeller && bestSellerImg) elBestSeller.src = bestSellerImg;
+      const elBestSeller = document.getElementById('best_seller_image');
+      if (elBestSeller && bestSellerImg) elBestSeller.src = bestSellerImg;
 
-        // Kritik dan Saran / Header WA Target
-        const btnWA = document.getElementById('btn_wa_kritik_saran');
-        if (btnWA && waNumber) {
-           btnWA.href = 'https://wa.me/62' + waNumber;
-        }
-
-        // Footer IG Target
-        const btnIG = document.getElementById('btn_ig_footer');
-        if (btnIG && igLink) {
-           btnIG.href = 'https://instagram.com/' + igLink;
-        }
-
-        // Footer WA Target
-        const btnWAFooter = document.getElementById('btn_wa_footer');
-        if (btnWAFooter && waNumber) {
-           btnWAFooter.href = 'https://wa.me/62' + waNumber;
-        }
-
-        // --- 2. KATALOG MENU ---
-        if (fields.products && fields.products.arrayValue.values) {
-          const products = fields.products.arrayValue.values.map(val => {
-          let name = '';
-          let image = '';
-          let options = [];
-          if (val.mapValue && val.mapValue.fields) {
-            name = val.mapValue.fields.name?.stringValue || '';
-            image = val.mapValue.fields.image?.stringValue || '';
-            if (val.mapValue.fields.options && val.mapValue.fields.options.arrayValue.values) {
-               options = val.mapValue.fields.options.arrayValue.values.map(opt => ({
-                 name: opt.mapValue?.fields?.name?.stringValue || '',
-                 image: opt.mapValue?.fields?.image?.stringValue || '',
-                 price: parseInt(opt.mapValue?.fields?.price?.integerValue || 0)
-               }));
-            }
-          } else {
-            name = val.stringValue || '';
-          }
-          return { name, image, options };
+      if (waNumber) {
+        ['btn_wa_kritik_saran', 'btn_wa_footer'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.href = 'https://wa.me/62' + waNumber;
         });
-        
-        console.log("Data Katalog Menu:", products);
-        // => [ 
-        //   { name: 'Cilok', image: '...', options: [ { name: 'Kuah Pedas', image: '...', price: 10000 } ] }
-        // ]
-        // 
-        // GUNAKAN DATA INI UNTUK MENG-UPDATE TAMPILAN PRODUK DI WEB ANDA!
-        // Misalnya: document.getElementById('harga_cilok_pedas').innerText = products[0].options[0].price;
-        // Dan: document.getElementById('foto_cilok_pedas').src = products[0].options[0].image;
-        }
+      }
+
+      const btnIG = document.getElementById('btn_ig_footer');
+      if (btnIG && igLink) btnIG.href = 'https://instagram.com/' + igLink;
+
+      // Update Produk (Jika element tersedia)
+      if (fields.products && fields.products.arrayValue.values) {
+        const products = fields.products.arrayValue.values.map(val => {
+          const f = val.mapValue?.fields || {};
+          return {
+            name: f.name?.stringValue || '',
+            image: f.image?.stringValue || '',
+            options: (f.options?.arrayValue?.values || []).map(opt => ({
+              name: opt.mapValue?.fields?.name?.stringValue || '',
+              image: opt.mapValue?.fields?.image?.stringValue || '',
+              price: parseInt(opt.mapValue?.fields?.price?.integerValue || 0)
+            }))
+          };
+        });
+        console.log("Katalog Terkoneksi:", products);
       }
     }
-  } catch(e) {
-    console.error("Gagal memuat katalog", e);
-  }
+  } catch(e) { console.error("Gagal sinkron menu:", e); }
 }
 
-// Panggil fungsi ini untuk memuat data ulasan pelanggan dari Dashboard
+// Memuat ulasan dari dashboard
 async function loadReviews() {
   try {
     const res = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
     if (res.ok) {
       const data = await res.json();
-      const fields = data.fields;
-      if (fields && fields.reviews && fields.reviews.arrayValue.values) {
-        const reviews = fields.reviews.arrayValue.values.map(val => {
-           return {
-             name: val.mapValue?.fields?.name?.stringValue || '',
-             text: val.mapValue?.fields?.text?.stringValue || '',
-             image: val.mapValue?.fields?.image?.stringValue || ''
-           };
-        });
-        console.log("Data Ulasan:", reviews);
-        
-        // Auto-update HTML jika ada elemen dengan id "ulasan_container" di web pemesanan Anda
-        const container = document.getElementById('ulasan_container');
-        if (container) {
-           container.innerHTML = '';
-           reviews.forEach(rev => {
-              container.innerHTML += \`
-                <div style="border:1px solid #e2e8f0; padding: 16px; margin-bottom: 12px; border-radius: 12px; background: #fff;">
-                  \${rev.image ? \`<img src="\${rev.image}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; float:left; margin-right:12px;">\` : ''}
-                  <strong style="display:block; font-size: 14px; margin-bottom: 4px;">\${rev.name}</strong>
-                  <p style="margin: 0; font-size: 13px; color: #64748b;">"\${rev.text}"</p>
-                  <div style="clear:both;"></div>
-                </div>
-              \`;
-           });
-        }
+      const reviews = data.fields?.reviews?.arrayValue?.values || [];
+      const container = document.getElementById('ulasan_container');
+      if (container && reviews.length > 0) {
+          container.innerHTML = '';
+          reviews.forEach(val => {
+            const r = val.mapValue?.fields;
+            container.innerHTML += \`
+              <div style="border:1px solid #e2e8f0; padding: 16px; margin-bottom: 12px; border-radius: 12px; background: #fff;">
+                \${r.image?.stringValue ? \`<img src="\${r.image.stringValue}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; float:left; margin-right:12px;">\` : ''}
+                <strong style="display:block; font-size: 14px; margin-bottom: 4px;">\${r.name?.stringValue}</strong>
+                <p style="margin: 0; font-size: 13px; color: #64748b;">"\${r.text?.stringValue}"</p>
+                <div style="clear:both;"></div>
+              </div>
+            \`;
+          });
       }
     }
-  } catch(e) {
-    console.error("Gagal memuat ulasan", e);
-  }
+  } catch(e) { console.error("Gagal muat ulasan:", e); }
 }
 
-// Panggil fungsi ini saat user ingin menambahkan menu ke keranjang (Bisa dicegah di awal)
-async function tambahKeTasBelanja(item) {
-   const sedangBuka = await cekBukaToko();
-   if (!sedangBuka) return; // Hentikan jika tutup
-   
-   // LOGIKA TAMBAH KE KERANJANG ANDA DI SINI
-   console.log(item + " ditambahkan ke keranjang");
-}
-
-// Fungsi untuk mengecek apakah stok jam tertentu masih tersedia
-async function cekBatasPcs(hariPilihan, jamPilihan, jumlahPcsDipesan) {
-  try {
-    // 1. Ambil pengaturan limits
-    let times = [];
-    let limits = [];
+// Menampilkan sisa slot per sesi waktu
+async function updateTampilanSlot(hari, jam) {
+    const el = document.getElementById('info_slot');
+    if (!el) return;
+    el.innerText = "Mengecek slot...";
     
-    const resToko = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
-    if (resToko.ok) {
-        const tokoData = await resToko.json();
-        const fields = tokoData.fields;
-        
-        if (fields) {
-            if (fields.poDatesConfig && fields.poDatesConfig.mapValue && fields.poDatesConfig.mapValue.fields && fields.poDatesConfig.mapValue.fields[hariPilihan]) {
-                const dateConfig = fields.poDatesConfig.mapValue.fields[hariPilihan].mapValue.fields;
-                if (dateConfig && dateConfig.times && dateConfig.limits) {
-                    times = dateConfig.times.arrayValue.values.map(v => v.stringValue);
-                    limits = dateConfig.limits.arrayValue.values.map(v => parseInt(v.integerValue || v.doubleValue || v.stringValue || 0));
-                }
-            } else if (fields.poTimes && fields.poLimits) { // Fallback
-                times = fields.poTimes.arrayValue.values.map(v => v.stringValue);
-                limits = fields.poLimits.arrayValue.values.map(v => parseInt(v.integerValue || v.doubleValue || v.stringValue || 0));
-            }
-        }
-    }
-    
-    if (times.length === 0 || limits.length === 0) return true;
-    
-    const idx = times.indexOf(jamPilihan);
-    if (idx === -1 || limits[idx] === 0) return true; // Tidak ada batas
-    const batasMaksimals = limits[idx];
-    
-    // 2. Hitung jumlah pcs dari pesanan yang sudah ada berdasarkan logika "rekapitulasi harian"
-    const resPesanan = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pesanan?pageSize=1000');
-    if (!resPesanan.ok) return true;
-    const pesananData = await resPesanan.json();
-    
-    let totalPcsSudahDipesan = 0;
-    if (pesananData.documents) {
-       for (const doc of pesananData.documents) {
-          const docFields = doc.fields;
-          if (!docFields || docFields.status?.stringValue === 'Dibatalkan') continue;
-          
-          if (docFields.tanggal_po?.stringValue === hariPilihan && docFields.waktu_po?.stringValue === jamPilihan) {
-             // LOGIKA REKAPITULASI UNTUK MENGHITUNG TOTAL PCS
-             let orderQty = 0;
-             if (docFields.items) {
-               if (docFields.items.arrayValue && docFields.items.arrayValue.values) {
-                 docFields.items.arrayValue.values.forEach(it => {
-                    const obj = it.mapValue?.fields;
-                    if (obj) orderQty += parseInt(obj.quantity?.integerValue || obj.quantity?.stringValue || obj.jumlah?.integerValue || obj.jumlah?.stringValue || 1);
-                 });
-               } else if (docFields.items.stringValue) {
-                 const parts = docFields.items.stringValue.split(/[\\n,;+]+/);
-                 parts.forEach(part => {
-                    if (!part.trim()) return;
-                    let qty = 1;
-                    const matchEnd = part.match(/^(.*?)\\s*\\(?(?:x\\s*(\\d+)|(\\d+)\\s*x)\\)?$/i);
-                    if (matchEnd) {
-                       qty = parseInt(matchEnd[2] || matchEnd[3]);
-                    } else {
-                       const matchStart = part.match(/^\\(?(?:x\\s*(\\d+)|(\\d+)\\s*x)\\)?\\s*(.*)$/i);
-                       if (matchStart) {
-                          qty = parseInt(matchStart[1] || matchStart[2]);
-                       }
-                    }
-                    orderQty += qty;
-                 });
-               }
-             }
-             if (orderQty === 0 && docFields.totalPcs) {
-                orderQty = parseInt(docFields.totalPcs.integerValue || docFields.totalPcs.stringValue || 1);
-             }
-             if (orderQty === 0) orderQty = 1;
-             totalPcsSudahDipesan += orderQty;
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
+      if (res.ok) {
+          const data = await res.json();
+          const pConfig = data.fields?.poDatesConfig?.mapValue?.fields || {};
+          let limit = 0;
+          if (pConfig[hari]) {
+              const conf = pConfig[hari].mapValue.fields;
+              const idx = (conf.times?.arrayValue?.values || []).map(v => v.stringValue).indexOf(jam);
+              if (idx !== -1) limit = parseInt(conf.limits?.arrayValue?.values[idx].integerValue || 0);
           }
-       }
-    }
-    
-    if (totalPcsSudahDipesan + jumlahPcsDipesan > batasMaksimals) {
-       alert("Maaf, waktu tersebut sudah penuh. Sisa slot: " + Math.max(0, batasMaksimals - totalPcsSudahDipesan) + " pcs. Mohon pilih waktu lain yang tersedia.");
-       return false;
-    }
-    return true;
-  } catch (e) {
-    console.error("Gagal cek batas pcs:", e);
-    return true;
-  }
+          
+          if (limit > 0) {
+              const rp = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pesanan?pageSize=1000');
+              const pd = await rp.json();
+              let count = 0;
+              (pd.documents || []).forEach(d => {
+                  const df = d.fields;
+                  if (df && df.ownerId?.stringValue === '${uid}' && df.status?.stringValue !== 'Dibatalkan' && df.tanggal_po?.stringValue === hari && df.waktu_po?.stringValue === jam) {
+                      count += parseInt(df.totalPcs?.integerValue || 1);
+                  }
+              });
+              el.innerText = "Sisa Slot: " + Math.max(0, limit - count) + " pcs";
+          } else {
+              el.innerText = "Slot tersedia";
+          }
+      }
+    } catch(e) { el.innerText = "Gagal cek slot"; }
 }
 
-// Panggil fungsi ini saat tombol 'Beli Sekarang' atau 'Checkout' di-klik di web Anda
+// FUNGSI UTAMA: MENGIRIM PESANAN KE DASHBOARD
 async function kirimPesanan() {
-  // 1. Cek status toko (Buka/Tutup) di saat-saat terakhir
   const sedangBuka = await cekBukaToko();
   if (!sedangBuka) return;
 
-  // 2. Ambil nilai dari input/form di web Anda (Sesuaikan ID-nya)
-  const nama = document.getElementById('input_nama').value;
-  const hari = document.getElementById('select_hari').value;
-  const jam = document.getElementById('select_jam').value;
-  const metode = document.getElementById('select_metode').value;
-
-  // 3. Data barang & total (Disesuaikan dengan keranjang web Anda)
-  const itemBeli = "Cilok (2x), Tahu (1x)"; // Contoh
-  const totalHarga = "15000";
-  const jumlahPcsDipesan = 3; // Contoh: 2 cilok + 1 tahu = 3 pcs
+  // Sesuaikan ID elemen input di website Anda:
+  const inputNama = document.getElementById('input_nama');
+  const selectHari = document.getElementById('select_hari');
+  const selectJam = document.getElementById('select_jam');
+  const selectMetode = document.getElementById('select_metode');
   
-  // 4. Cek batas Pcs!
-  const bisaPesan = await cekBatasPcs(hari, jam, jumlahPcsDipesan);
-  if (!bisaPesan) return;
+  if (!inputNama || !selectHari || !selectJam) {
+    alert("Terjadi kesalahan teknis: Element input tidak ditemukan.");
+    return;
+  }
 
-  // 5. Sistem mengirim langsung ke Dashboard Admin ini
-  fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pesanan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const dataPesanan = {
       fields: {
         ownerId: { stringValue: "${uid}" },
         status: { stringValue: "Baru" },
         createdAt: { stringValue: new Date().toISOString() },
-        customerName: { stringValue: nama },
-        tanggal_po: { stringValue: hari },
-        waktu_po: { stringValue: jam },
-        paymentMethod: { stringValue: metode },
-        items: { stringValue: itemBeli },
-        totalHarga: { integerValue: totalHarga },
-        totalPcs: { integerValue: jumlahPcsDipesan.toString() }
+        customerName: { stringValue: inputNama.value },
+        tanggal_po: { stringValue: selectHari.value },
+        waktu_po: { stringValue: selectJam.value },
+        paymentMethod: { stringValue: selectMetode ? selectMetode.value : "Transfer" },
+        items: { stringValue: "Pesanan dari Website" }, // Custom: Bisa diisi detail item dari keranjang Anda
+        totalHarga: { integerValue: "0" }, // Custom: Isi dengan total harga dari keranjang
+        totalPcs: { integerValue: "1" }     // Custom: Isi dengan total pcs dari keranjang
       }
-    })
+  };
+
+  fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pesanan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dataPesanan)
   })
   .then(response => {
     if(response.ok) {
-       alert("Pesanan otomatis terhubung ke Dashboard!");
+       alert("Pesanan Anda telah diterima! Admin akan segera memproses.");
+       // Reset form atau redirect ke halaman sukses
     } else {
-       alert("Gagal mengirim pesanan.");
+       alert("Maaf, gagal mengirim pesanan. Silakan coba lagi.");
     }
   });
 }
 </script>`;
+    return snippet;
   };
 
   const copyToClipboard = () => {

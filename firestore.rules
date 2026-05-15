@@ -167,9 +167,18 @@ service cloud.firestore {
     }
 
     match /pesanan/{orderId} {
-      allow list, read: if true;
-      allow update, delete: if isSignedIn();
-      allow create: if true && (!('status' in incoming()) || incoming().status == 'Baru' || incoming().status == 'Selesai');
+      // Hanya admin yang bisa melihat daftar pesanan miliknya sendiri
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if true; // Izinkan get individu untuk tracking jika perlu
+      
+      // Izinkan publik membuat pesanan, tapi wajib menyertakan ownerId yang valid
+      allow create: if incoming().keys().hasAll(['ownerId', 'customerName', 'status']) &&
+                    incoming().ownerId is string &&
+                    incoming().ownerId.size() > 0 &&
+                    (!('status' in incoming()) || incoming().status in ['Baru', 'Selesai']);
+      
+      // Update dan Delete hanya oleh admin pemilik
+      allow update, delete: if isSignedIn() && existing().ownerId == request.auth.uid;
     }
 
     match /orders/{orderId} {
@@ -202,6 +211,22 @@ service cloud.firestore {
     }
     match /absensi/{absensiId} {
       allow get, list, create, update, delete: if isSignedIn();
+    }
+
+    match /marketing_journey/{journeyId} {
+      allow get: if isOwner(existing());
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isOwner(existing());
+      allow delete: if isOwner(existing());
+    }
+
+    match /marketing_calendar/{noteId} {
+      allow get: if isOwner(existing());
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isOwner(existing());
+      allow delete: if isOwner(existing());
     }
   }
 }

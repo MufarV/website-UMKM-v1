@@ -26,6 +26,7 @@ export const AbsensiView = () => {
     waktu: '',
     status: 'Hadir',
     noted: '',
+    lokasi_manual: '',
     location: null as { lat: number; lng: number } | null
   });
 
@@ -56,20 +57,20 @@ export const AbsensiView = () => {
     
     try {
       if ("geolocation" in navigator) {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-          });
+        // Handle potential permission denial or timeout
+        location = await new Promise<any>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            (err) => {
+               console.warn("GPS Access Denied/Error:", err);
+               resolve(null); // Resolve with null so we can still save
+            },
+            { enableHighAccuracy: true, timeout: 6000 }
+          );
         });
-        location = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
       }
     } catch (error) {
-      console.error("Error getting location:", error);
+      console.error("Geolocation Error:", error);
     } finally {
       setIsLocating(false);
     }
@@ -89,6 +90,7 @@ export const AbsensiView = () => {
       waktu: '',
       status: 'Hadir',
       noted: '',
+      lokasi_manual: '',
       location: null
     });
     setShowAdd(false);
@@ -183,6 +185,15 @@ export const AbsensiView = () => {
                   onChange={e => setNewEntry({...newEntry, noted: e.target.value})}
                 />
               </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Lokasi/Tempat</label>
+                <input 
+                  placeholder="e.g. Cabang Bandung" 
+                  className="w-full px-5 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 ring-indigo-500/10 font-bold"
+                  value={newEntry.lokasi_manual}
+                  onChange={e => setNewEntry({...newEntry, lokasi_manual: e.target.value})}
+                />
+              </div>
             </div>
             <div className="flex justify-between items-center pt-4">
               <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
@@ -208,6 +219,7 @@ export const AbsensiView = () => {
               <tr>
                 <th className="px-8 py-6 rounded-tl-[2rem]">Tanggal</th>
                 <th className="px-8 py-6">Nama & Keterangan</th>
+                <th className="px-8 py-6">Lokasi / Maps</th>
                 <th className="px-8 py-6 text-center">Status</th>
                 <th className="px-8 py-6 text-right rounded-tr-[2rem]">Aksi</th>
               </tr>
@@ -215,7 +227,7 @@ export const AbsensiView = () => {
             <tbody className="divide-y divide-slate-100 border-t border-slate-100">
               {absensi.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-8 py-16 text-center text-slate-400">
+                  <td colSpan={5} className="px-8 py-16 text-center text-slate-400">
                     <CalendarCheck className="w-12 h-12 mx-auto mb-4 opacity-20" />
                     <p className="font-bold">Belum ada log absensi</p>
                     <p className="text-xs mt-1">Mulai catat kehadiran tim Anda</p>
@@ -231,15 +243,33 @@ export const AbsensiView = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <div className="font-bold text-slate-900 mb-1 flex items-center gap-2">
+                      <div className="font-bold text-slate-900 mb-1 flex items-center flex-wrap gap-2">
                         {rec.name || 'NN'}
-                        {rec.location && (
-                          <div className="flex items-center gap-0.5 text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-mono" title={`${rec.location.lat}, ${rec.location.lng}`}>
-                            <MapPin className="w-2 h-2" /> GPS OK
-                          </div>
-                        )}
                       </div>
                       {rec.noted && <div className="text-xs text-slate-500">{rec.noted}</div>}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col gap-2 items-start justify-center">
+                        {rec.lokasi_manual && (
+                           <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                             {rec.lokasi_manual}
+                           </span>
+                        )}
+                        {rec.location && (
+                          <a 
+                            href={`https://www.google.com/maps?q=${rec.location.lat},${rec.location.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full font-bold hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                            title="Buka lokasi di Google Maps"
+                          >
+                            <MapPin className="w-2.5 h-2.5" /> Buka Maps
+                          </a>
+                        )}
+                        {!rec.lokasi_manual && !rec.location && (
+                          <span className="text-[10px] text-slate-300 italic">Tidak ada lokasi</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-8 py-6 text-center">
                       <span className={cn(

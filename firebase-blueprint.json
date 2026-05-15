@@ -212,6 +212,54 @@
         "createdAt": { "type": "object" }
       },
       "required": ["assetId", "date", "notes"]
+    },
+    "pesanan": {
+      "title": "Pesanan Online",
+      "description": "Pesanan masuk dari website publik.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["Baru", "Selesai", "Dibatalkan"] },
+        "tanggal_po": { "type": "string" },
+        "waktu_po": { "type": "string" },
+        "items": { "type": "string" },
+        "totalHarga": { "type": "number" },
+        "totalPcs": { "type": "number" },
+        "paymentMethod": { "type": "string" }
+      }
+    },
+    "marketing_journey": {
+      "title": "Customer Journey",
+      "description": "Statistik funnel pemasaran dan catatan analisis.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "awareness": { "type": "number" },
+        "interest": { "type": "number" },
+        "action": { "type": "number" },
+        "retention": { "type": "number" },
+        "advocacy": { "type": "number" },
+        "awarenessNotes": { "type": "string" },
+        "interestNotes": { "type": "string" },
+        "actionNotes": { "type": "string" },
+        "retentionNotes": { "type": "string" },
+        "advocacyNotes": { "type": "string" }
+      }
+    },
+    "marketing_calendar": {
+      "title": "Marketing Calendar",
+      "description": "Catatan pemasaran harian.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "isHighlighted": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["idea", "reminder", "highlight"] }
+      },
+      "required": ["date", "note"]
     }
   },
   "firestore": {
@@ -274,6 +322,18 @@
     "/sarpra_logs/{logId}": {
       "schema": "sarpra_logs",
       "description": "Service and maintenance logs for assets."
+    },
+    "/pesanan/{orderId}": {
+      "schema": "pesanan",
+      "description": "Koleksi pesanan masuk."
+    },
+    "/marketing_journey/{journeyId}": {
+      "schema": "marketing_journey",
+      "description": "Statistik funnel pemasaran."
+    },
+    "/marketing_calendar/{noteId}": {
+      "schema": "marketing_calendar",
+      "description": "Catatan pemasaran harian."
     }
   }
 }
