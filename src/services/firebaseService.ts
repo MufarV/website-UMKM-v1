@@ -5,6 +5,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  setDoc,
   query, 
   where, 
   onSnapshot,
@@ -87,6 +88,23 @@ export const firebaseService = {
       return docRef.id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, collectionName);
+    }
+  },
+
+  // Set (Create with ID or Overwrite)
+  async set(collectionName: string, id: string, data: any) {
+    if (!auth.currentUser) throw new Error('Not authenticated');
+    try {
+      const docRef = doc(db, collectionName, id);
+      const docData = {
+        ...data,
+        ownerId: auth.currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, docData);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `${collectionName}/${id}`);
     }
   },
 

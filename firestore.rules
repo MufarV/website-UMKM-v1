@@ -41,12 +41,14 @@ service cloud.firestore {
     }
 
     function isValidInventory(data) {
-      return data.keys().hasAll(['ownerId', 'name', 'stock', 'unit', 'createdAt', 'updatedAt']) &&
-             data.keys().size() <= 10 &&
+      return data.keys().hasAll(['ownerId', 'name', 'stock', 'unit', 'category', 'createdAt', 'updatedAt']) &&
+             data.keys().size() <= 13 &&
              data.ownerId == request.auth.uid &&
              data.name is string && data.name.size() <= 100 &&
              data.stock is number && data.stock >= 0 &&
-             data.unit is string && data.unit.size() <= 20;
+             data.unit is string && data.unit.size() <= 20 &&
+             data.category is string && data.category.size() <= 50 &&
+             (!('batches' in data) || data.batches is list);
     }
 
     function isValidAsset(data) {
@@ -69,7 +71,6 @@ service cloud.firestore {
       allow get: if isOwner(existing());
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming()) && 
-                    incoming().date == request.time && 
                     incoming().createdAt == request.time;
       allow update: if isOwner(existing()) && isValidTransaction(incoming()) && 
                     incoming().ownerId == existing().ownerId &&
@@ -84,7 +85,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(itemId) && isValidInventory(incoming());
       allow update: if isOwner(existing()) && isValidInventory(incoming()) &&
                     incoming().ownerId == existing().ownerId &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['stock', 'price', 'name', 'minStock']);
+                    incoming().diff(existing()).affectedKeys().hasOnly(['stock', 'price', 'name', 'unit', 'minStock', 'category', 'updatedAt', 'batches']);
       allow delete: if isOwner(existing());
     }
 
@@ -153,6 +154,54 @@ service cloud.firestore {
       allow update: if isOwner(existing()) && isValidDivision(incoming()) &&
                     incoming().ownerId == existing().ownerId;
       allow delete: if isOwner(existing());
+    }
+
+    match /pengaturan/{settingId} {
+      allow read: if settingId == 'pengaturan_toko' || isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /settings/{settingId} {
+      allow read: if settingId == 'store_settings' || isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /pesanan/{orderId} {
+      allow list, read: if true;
+      allow update, delete: if isSignedIn();
+      allow create: if true && (!('status' in incoming()) || incoming().status == 'Baru' || incoming().status == 'Selesai');
+    }
+
+    match /orders/{orderId} {
+      allow read, update, delete, list: if isSignedIn();
+      allow create: if true && (!('status' in incoming()) || incoming().status == 'Baru');
+    }
+    match /production_plans/{planId} {
+      allow get: if isOwner(existing());
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(planId);
+      allow update: if isOwner(existing());
+      allow delete: if isOwner(existing());
+    }
+
+    match /production_logs/{logId} {
+      allow get: if isOwner(existing());
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update: if isOwner(existing());
+      allow delete: if isOwner(existing());
+    }
+    match /production_products/{productId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+    match /sarpra_assets/{assetId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+    match /sarpra_logs/{logId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+    match /absensi/{absensiId} {
+      allow get, list, create, update, delete: if isSignedIn();
     }
   }
 }

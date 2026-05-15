@@ -1,4 +1,4 @@
-export type BusinessSector = 'Manajemen' | 'Pemasaran' | 'Keuangan' | 'Produksi' | 'Sarpra' | 'Digital';
+export type BusinessSector = 'Manajemen' | 'Pemasaran' | 'Keuangan' | 'Produksi' | 'Pesanan' | 'Sarpra' | 'Digital';
 
 export interface DashboardMetric {
   label: string;

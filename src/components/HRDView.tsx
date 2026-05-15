@@ -27,9 +27,7 @@ export const HRDView = () => {
     status: 'Active', 
     email: '', 
     phone: '',
-    insight: 70,
-    skill: 70,
-    motivation: 70
+    notes: ''
   });
 
   useEffect(() => {
@@ -47,9 +45,7 @@ export const HRDView = () => {
       status: 'Active', 
       email: '', 
       phone: '',
-      insight: 70,
-      skill: 70,
-      motivation: 70
+      notes: ''
     });
     setShowAddEmployee(false);
   };
@@ -58,6 +54,10 @@ export const HRDView = () => {
     if (window.confirm('Hapus staf ini?')) {
       await firebaseService.delete('employees', id);
     }
+  };
+
+  const handleUpdateNote = async (id: string, notes: string) => {
+    await firebaseService.update('employees', id, { notes });
   };
 
   return (
@@ -156,19 +156,14 @@ export const HRDView = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-indigo-50/50 rounded-2xl text-center border border-indigo-100/50">
-                  <p className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter mb-1">Insight</p>
-                  <p className="text-sm font-black text-indigo-700">{emp.insight || 0}%</p>
-                </div>
-                <div className="p-3 bg-emerald-50/50 rounded-2xl text-center border border-emerald-100/50">
-                  <p className="text-[8px] font-black text-emerald-400 uppercase tracking-tighter mb-1">Skill</p>
-                  <p className="text-sm font-black text-emerald-700">{emp.skill || 0}%</p>
-                </div>
-                <div className="p-3 bg-amber-50/50 rounded-2xl text-center border border-amber-100/50">
-                  <p className="text-[8px] font-black text-amber-400 uppercase tracking-tighter mb-1">Motivasi</p>
-                  <p className="text-sm font-black text-amber-700">{emp.motivation || 0}%</p>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">Catatan</label>
+                <textarea 
+                  className="w-full p-3 bg-slate-50 rounded-2xl text-xs font-medium text-slate-700 border border-slate-100 outline-none focus:ring-2 ring-indigo-500/10 focus:bg-white transition-colors resize-none h-20"
+                  placeholder="Tambahkan catatan..."
+                  defaultValue={emp.notes || ''}
+                  onBlur={(e) => handleUpdateNote(emp.id, e.target.value)}
+                />
               </div>
 
               <div className="space-y-2 pt-2">
@@ -184,12 +179,6 @@ export const HRDView = () => {
                   )}>{emp.status}</span>
                 </div>
               </div>
-            </div>
-            
-            <div className="bg-slate-50 p-4 flex justify-center border-t border-slate-100">
-              <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors flex items-center gap-1">
-                Lihat Detail Performa <ChevronRight className="w-3 h-3" />
-              </button>
             </div>
           </div>
         ))}

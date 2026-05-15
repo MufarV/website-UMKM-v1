@@ -8,7 +8,9 @@ import {
   Wrench, 
   Globe, 
   UserCheck,
+  CalendarCheck,
   BarChart3,
+  ShoppingCart,
   Menu,
   X,
   LogOut,
@@ -111,7 +113,9 @@ export const Layout = ({ children, activeView, setActiveView }: {
     { label: 'Manajemen & Ops', items: [
       { id: 'manajemen', label: 'Manajemen', icon: Users },
       { id: 'hrd', label: 'HRD', icon: UserCheck },
+      { id: 'absensi', label: 'Absensi', icon: CalendarCheck },
       { id: 'produksi', label: 'Produksi', icon: Package },
+      { id: 'pesanan', label: 'Pesanan', icon: ShoppingCart },
       { id: 'sarpra', label: 'Sarpra', icon: Wrench },
     ]},
     { label: 'Bisnis & Keuangan', items: [
@@ -130,7 +134,12 @@ export const Layout = ({ children, activeView, setActiveView }: {
   ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 overflow-x-hidden">
+    <div className="flex min-h-screen bg-[#FDFDFD] font-sans text-slate-900 overflow-x-hidden relative">
+      {/* Decorative animated background blurs for a modern student/startup vibe */}
+      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-400/20 rounded-full blur-[120px] pointer-events-none mix-blend-multiply" />
+      <div className="fixed top-[20%] right-[-10%] w-[400px] h-[400px] bg-fuchsia-400/20 rounded-full blur-[100px] pointer-events-none mix-blend-multiply" />
+      <div className="fixed bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-emerald-400/10 rounded-full blur-[120px] pointer-events-none mix-blend-multiply" />
+
       {/* Mobile Drawer Overlay */}
       <AnimatePresence>
         {isMobileMenuOpen && (
@@ -147,7 +156,7 @@ export const Layout = ({ children, activeView, setActiveView }: {
       {/* Sidebar (Desktop & Mobile Drawer) */}
       <aside 
         className={cn(
-          "fixed inset-y-0 left-0 z-[70] bg-white border-r border-slate-200 transition-all duration-300 ease-in-out lg:translate-x-0 shadow-2xl lg:shadow-none",
+          "fixed inset-y-0 left-0 z-[70] bg-white/70 backdrop-blur-3xl border-r border-white/60 transition-all duration-300 ease-in-out lg:translate-x-0 lg:bg-transparent lg:shadow-none shadow-[4px_0_24px_rgba(0,0,0,0.02)]",
           isSidebarOpen ? "w-64" : "w-20",
           isMobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0"
         )}
@@ -238,11 +247,11 @@ export const Layout = ({ children, activeView, setActiveView }: {
 
       {/* Main Content */}
       <main className={cn(
-        "flex-1 min-h-screen flex flex-col transition-all duration-300 pb-20 lg:pb-0",
+        "flex-1 min-h-screen flex flex-col transition-all duration-300 pb-20 lg:pb-0 relative z-10",
         isSidebarOpen ? "lg:ml-64" : "lg:ml-20"
       )}>
         {/* Top Header */}
-        <header className="sticky top-0 z-40 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between shadow-sm">
+        <header className="sticky top-0 z-40 h-16 lg:h-20 bg-white/40 backdrop-blur-2xl border-b border-white/60 px-4 lg:px-8 flex items-center justify-between shadow-[0_4px_30px_rgb(0,0,0,0.02)]">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => {

@@ -16,8 +16,10 @@ import {
   MoreVertical,
   Trash2,
   Edit2,
+  X,
   ChevronDown,
-  CheckCircle2
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -37,7 +39,8 @@ import {
 
 import { firebaseService } from '../services/firebaseService';
 import { auth } from '../lib/firebase';
-import { serverTimestamp } from 'firebase/firestore';
+import { serverTimestamp, Timestamp } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 // --- Sub-components for Accounting ---
 
@@ -52,9 +55,12 @@ const AccountManagement = ({ accounts }: { accounts: any[] }) => {
     setNewAccount({ code: '', name: '', type: 'Asset' });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Hapus akun ini?')) {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
       await firebaseService.delete('accounts', id);
+    } catch (err) {
+      console.error("Gagal menghapus akun:", err);
     }
   };
 
@@ -141,7 +147,7 @@ const AccountManagement = ({ accounts }: { accounts: any[] }) => {
                 </td>
                 <td className="px-6 py-4 text-right">
                   <button 
-                    onClick={() => handleDelete(acc.id)}
+                    onClick={(e) => handleDelete(acc.id, e)}
                     className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -169,7 +175,7 @@ const JournalView = ({ accounts, entries }: { accounts: any[], entries: any[] })
     const totalCredit = items.reduce((sum, i) => sum + i.credit, 0);
     
     if (totalDebit !== totalCredit || totalDebit === 0) {
-      alert('Jurnal tidak balance atau kosong!');
+      console.error('Jurnal tidak balance atau kosong!');
       return;
     }
 
@@ -348,6 +354,20 @@ const JournalView = ({ accounts, entries }: { accounts: any[], entries: any[] })
 };
 
 const TrialBalanceList = ({ accounts, entries }: { accounts: any[], entries: any[] }) => {
+  const accountBalances: { [key: string]: number } = {};
+  accounts.forEach(acc => accountBalances[acc.id] = 0);
+
+  let totalDebit = 0;
+  let totalCredit = 0;
+
+  entries.forEach(entry => {
+    entry.items.forEach((item: any) => {
+      if (accountBalances[item.accountId] !== undefined) {
+        accountBalances[item.accountId] += item.debit - item.credit;
+      }
+    });
+  });
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
        <div className="p-8 border-b border-slate-100 flex justify-between items-center">
@@ -373,11 +393,34 @@ const TrialBalanceList = ({ accounts, entries }: { accounts: any[], entries: any
         <tbody className="divide-y divide-slate-100">
           {accounts.map(acc => {
             const isDebitSide = ['Asset', 'Expense'].includes(acc.type);
+            const rawBalance = accountBalances[acc.id] || 0;
+            const absoluteBalance = Math.abs(rawBalance);
+            
+            // For display in trial balance, we generally put positive balances on debit side for Asset/Expense, 
+            // and negative balances on credit side for Asset/Expense. But simpler: just add them to the correct column.
+            let computedDebit = 0;
+            let computedCredit = 0;
+
+            if (isDebitSide) {
+              if (rawBalance >= 0) computedDebit = rawBalance;
+              else computedCredit = absoluteBalance;
+            } else {
+              if (rawBalance <= 0) computedCredit = absoluteBalance;
+              else computedDebit = absoluteBalance;
+            }
+
+            totalDebit += computedDebit;
+            totalCredit += computedCredit;
+
             return (
               <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-8 py-4 font-bold text-slate-700">{acc.name}</td>
-                <td className="px-8 py-4 text-right font-mono text-indigo-600">{isDebitSide ? `Rp 0` : '-'}</td>
-                <td className="px-8 py-4 text-right font-mono text-slate-400">{!isDebitSide ? `Rp 0` : '-'}</td>
+                <td className={cn("px-8 py-4 text-right font-mono", computedDebit > 0 ? "text-indigo-600" : "text-slate-400")}>
+                  {computedDebit > 0 ? `Rp ${computedDebit.toLocaleString('id-ID')}` : '-'}
+                </td>
+                <td className={cn("px-8 py-4 text-right font-mono", computedCredit > 0 ? "text-slate-600" : "text-slate-400")}>
+                  {computedCredit > 0 ? `Rp ${computedCredit.toLocaleString('id-ID')}` : '-'}
+                </td>
               </tr>
             )
           })}
@@ -385,8 +428,8 @@ const TrialBalanceList = ({ accounts, entries }: { accounts: any[], entries: any
         <tfoot className="bg-indigo-50 font-black text-indigo-900 border-t border-indigo-100">
           <tr>
             <td className="px-8 py-4 uppercase text-xs tracking-widest">Total Keseluruhan</td>
-            <td className="px-8 py-4 text-right font-mono">Rp 0</td>
-            <td className="px-8 py-4 text-right font-mono">Rp 0</td>
+            <td className="px-8 py-4 text-right font-mono text-indigo-600">Rp {totalDebit.toLocaleString('id-ID')}</td>
+            <td className="px-8 py-4 text-right font-mono text-slate-600">Rp {totalCredit.toLocaleString('id-ID')}</td>
           </tr>
         </tfoot>
       </table>
@@ -395,9 +438,174 @@ const TrialBalanceList = ({ accounts, entries }: { accounts: any[], entries: any
 };
 
 const FinancialReports = ({ accounts, entries }: { accounts: any[], entries: any[] }) => {
+  const [period, setPeriod] = useState('Semua');
+  const [selectedDateFilter, setSelectedDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedWeekFilter, setSelectedWeekFilter] = useState(() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil(( ( (d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+    return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
+  });
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+  });
+
+  const filteredEntries = entries.filter(t => {
+    if (period === 'Semua') return true;
+    const date = t.date?.toDate ? t.date.toDate() : new Date();
+
+    if (period === 'Harian') {
+       const filterDate = new Date(selectedDateFilter);
+       return date.getFullYear() === filterDate.getFullYear() && 
+              date.getMonth() === filterDate.getMonth() && 
+              date.getDate() === filterDate.getDate();
+    }
+    if (period === 'Mingguan') {
+       if (!selectedWeekFilter) return true;
+       // parse 2026-W11
+       const [y, w] = selectedWeekFilter.split('-W');
+       const year = parseInt(y);
+       const week = parseInt(w);
+       
+       const simpleStart = new Date(year, 0, 1 + (week - 1) * 7);
+       const dow = simpleStart.getDay();
+       const ISOweekStart = simpleStart;
+       if (dow <= 4)
+           ISOweekStart.setDate(simpleStart.getDate() - simpleStart.getDay() + 1);
+       else
+           ISOweekStart.setDate(simpleStart.getDate() + 8 - simpleStart.getDay());
+           
+       const ISOweekEnd = new Date(ISOweekStart);
+       ISOweekEnd.setDate(ISOweekEnd.getDate() + 6);
+       
+       return date >= ISOweekStart && date <= ISOweekEnd;
+    }
+    if (period === 'Bulanan') {
+       if (!selectedMonthFilter) return true;
+       const [y, m] = selectedMonthFilter.split('-');
+       return date.getFullYear() === parseInt(y) && date.getMonth() === parseInt(m) - 1;
+    }
+    return true;
+  });
+
+  const accountBalances: { [key: string]: number } = {};
+  accounts.forEach(acc => accountBalances[acc.id] = 0);
+
+  filteredEntries.forEach(entry => {
+    entry.items.forEach((item: any) => {
+      if (accountBalances[item.accountId] !== undefined) {
+        accountBalances[item.accountId] += item.debit - item.credit;
+      }
+    });
+  });
+
+  const getBalance = (acc: any) => {
+    const isDebitSide = ['Asset', 'Expense'].includes(acc.type);
+    const rawBalance = accountBalances[acc.id] || 0;
+    return isDebitSide ? rawBalance : -rawBalance;
+  };
+
+  const revenueAccounts = accounts.filter(a => a.type === 'Revenue');
+  const expenseAccounts = accounts.filter(a => a.type === 'Expense');
+  
+  const totalRevenue = revenueAccounts.reduce((sum, acc) => sum + getBalance(acc), 0);
+  const totalExpense = expenseAccounts.reduce((sum, acc) => sum + getBalance(acc), 0);
+  const netIncome = totalRevenue - totalExpense;
+
+  const assetAccounts = accounts.filter(a => a.type === 'Asset');
+  const liabilityAccounts = accounts.filter(a => a.type === 'Liability');
+  const equityAccounts = accounts.filter(a => a.type === 'Equity');
+
+  const totalAssets = assetAccounts.reduce((sum, acc) => sum + getBalance(acc), 0);
+  const totalLiabilities = liabilityAccounts.reduce((sum, acc) => sum + getBalance(acc), 0);
+  // Equity includes net income from the period
+  const totalEquity = equityAccounts.reduce((sum, acc) => sum + getBalance(acc), 0) + netIncome;
+  const totalLiabilityAndEquity = totalLiabilities + totalEquity;
+
+  const handleExportExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    const dataProfitLoss = [
+      ['Kategori', 'Nama Akun', 'Jumlah (Rp)'],
+      ...revenueAccounts.map(a => ['Pendapatan', a.name, getBalance(a)]),
+      ...expenseAccounts.map(a => ['Beban', a.name, -getBalance(a)]),
+      ['', 'Total Laba Bersih', netIncome]
+    ];
+    
+    const wsProfitLoss = XLSX.utils.aoa_to_sheet(dataProfitLoss);
+    XLSX.utils.book_append_sheet(wb, wsProfitLoss, 'Laba Rugi');
+
+    const dataBalanceSheet = [
+      ['Kategori', 'Nama Akun', 'Saldo Bersih (Rp)'],
+      ...assetAccounts.map(a => ['Aktiva (Aset)', a.name, getBalance(a)]),
+      ['', 'Total Aktiva', totalAssets],
+      [],
+      ...liabilityAccounts.map(a => ['Passiva (Kewajiban)', a.name, getBalance(a)]),
+      ...equityAccounts.map(a => ['Ekuitas', a.name, getBalance(a)]),
+      ['Ekuitas', 'Laba Ditahan', netIncome],
+      ['', 'Total Passiva & Ekuitas', totalLiabilityAndEquity]
+    ];
+    
+    const wsBalanceSheet = XLSX.utils.aoa_to_sheet(dataBalanceSheet);
+    XLSX.utils.book_append_sheet(wb, wsBalanceSheet, 'Neraca');
+
+    XLSX.writeFile(wb, `Laporan_Keuangan_${period}.xlsx`);
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 md:p-6 rounded-3xl border border-slate-200 gap-4">
+        <div>
+          <h2 className="text-lg md:text-xl font-bold">Laporan Keuangan</h2>
+          <p className="text-xs text-slate-500">Melihat Laba Rugi dan Neraca.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+           <select 
+              className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium h-10"
+              value={period}
+              onChange={e => setPeriod(e.target.value)}
+            >
+              <option value="Semua">Semua Waktu</option>
+              <option value="Harian">Harian</option>
+              <option value="Mingguan">Mingguan</option>
+              <option value="Bulanan">Bulanan</option>
+            </select>
+            {period === 'Harian' && (
+              <input 
+                 type="date" 
+                 value={selectedDateFilter} 
+                 onChange={e => setSelectedDateFilter(e.target.value)}
+                 className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium outline-none h-10"
+              />
+            )}
+            {period === 'Mingguan' && (
+              <input 
+                 type="week" 
+                 value={selectedWeekFilter} 
+                 onChange={e => setSelectedWeekFilter(e.target.value)}
+                 className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium outline-none h-10"
+              />
+            )}
+            {period === 'Bulanan' && (
+              <input 
+                 type="month" 
+                 value={selectedMonthFilter} 
+                 onChange={e => setSelectedMonthFilter(e.target.value)}
+                 className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 font-medium outline-none h-10"
+              />
+            )}
+            <button 
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-4 h-10 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+            >
+              <Download className="w-4 h-4" /> Export Excel
+            </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
             <BarIcon className="w-5 h-5" />
@@ -408,36 +616,36 @@ const FinancialReports = ({ accounts, entries }: { accounts: any[], entries: any
           </div>
         </div>
         
-        <div className="space-y-4">
-          <div className="flex justify-between font-bold text-slate-400 text-[10px] uppercase tracking-widest">
-            <span>Pendapatan</span>
-            <span>Jumlah</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Pendapatan Jasa</span>
-            <span className="font-mono text-emerald-600">Rp 0</span>
-          </div>
-          <div className="h-px bg-slate-100" />
-          <div className="flex justify-between font-bold text-slate-400 text-[10px] uppercase tracking-widest">
-            <span>Beban-Beban</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Beban Gaji</span>
-            <span className="font-mono text-rose-600">(Rp 0)</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Beban Sewa</span>
-            <span className="font-mono text-rose-600">(Rp 0)</span>
-          </div>
-          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center mt-8">
-            <span className="font-bold text-emerald-900">Total Laba Bersih</span>
-            <span className="font-black text-emerald-600 text-lg">Rp 0</span>
+          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="flex justify-between font-bold text-slate-400 text-[10px] uppercase tracking-widest">
+              <span>Pendapatan</span>
+              <span>Jumlah</span>
+            </div>
+            {revenueAccounts.map(acc => (
+              <div key={acc.id} className="flex justify-between text-sm">
+                <span>{acc.name}</span>
+                <span className="font-mono text-emerald-600">Rp {getBalance(acc).toLocaleString('id-ID')}</span>
+              </div>
+            ))}
+            <div className="h-px bg-slate-100" />
+            <div className="flex justify-between font-bold text-slate-400 text-[10px] uppercase tracking-widest">
+              <span>Beban-Beban</span>
+            </div>
+            {expenseAccounts.map(acc => (
+              <div key={acc.id} className="flex justify-between text-sm">
+                <span>{acc.name}</span>
+                <span className="font-mono text-rose-600">(Rp {getBalance(acc).toLocaleString('id-ID')})</span>
+              </div>
+            ))}
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center mt-8 sticky bottom-0">
+              <span className="font-bold text-emerald-900">Total Laba Bersih</span>
+              <span className="font-black text-emerald-600 text-lg">Rp {netIncome.toLocaleString('id-ID')}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col max-h-[600px]">
+          <div className="flex items-center gap-3 mb-8 shrink-0">
           <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600">
             <Scale className="w-5 h-5" />
           </div>
@@ -447,34 +655,51 @@ const FinancialReports = ({ accounts, entries }: { accounts: any[], entries: any
           </div>
         </div>
         
-        <div className="space-y-4">
-          <div className="flex justify-between font-bold text-indigo-600 text-[10px] uppercase tracking-widest">
-            <span>Aktiva (Aset)</span>
-            <span>Saldo Bersih</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Kas & Bank</span>
-            <span className="font-mono">Rp 128.450.000</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Peralatan</span>
-            <span className="font-mono">Rp 15.000.000</span>
-          </div>
-          <div className="h-px bg-slate-100 mt-6" />
-          <div className="flex justify-between font-bold text-amber-600 text-[10px] uppercase tracking-widest">
-            <span>Passiva (Kewajiban & Ekuitas)</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Utang Usaha</span>
-            <span className="font-mono">Rp 5.000.000</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Modal Pemilik</span>
-            <span className="font-mono font-bold">Rp 138.450.000</span>
-          </div>
-          <div className="p-4 bg-slate-900 rounded-2xl flex justify-between items-center mt-8 text-white">
-            <span className="font-bold opacity-70">Total Passiva</span>
-            <span className="font-black text-lg">Rp 143.450.000</span>
+          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="flex justify-between font-bold text-indigo-600 text-[10px] uppercase tracking-widest">
+              <span>Aktiva (Aset)</span>
+              <span>Saldo Bersih</span>
+            </div>
+            {assetAccounts.map(acc => (
+               <div key={acc.id} className="flex justify-between text-sm">
+                 <span>{acc.name}</span>
+                 <span className="font-mono">Rp {getBalance(acc).toLocaleString('id-ID')}</span>
+               </div>
+            ))}
+            <div className="flex justify-between text-sm font-bold pt-2 border-t border-slate-100">
+               <span>Total Aktiva</span>
+               <span className="font-mono text-indigo-600">Rp {totalAssets.toLocaleString('id-ID')}</span>
+            </div>
+
+            <div className="h-px bg-slate-100 mt-6" />
+
+            <div className="flex justify-between font-bold text-amber-600 text-[10px] uppercase tracking-widest">
+              <span>Passiva (Kewajiban)</span>
+            </div>
+            {liabilityAccounts.map(acc => (
+               <div key={acc.id} className="flex justify-between text-sm">
+                 <span>{acc.name}</span>
+                 <span className="font-mono">Rp {getBalance(acc).toLocaleString('id-ID')}</span>
+               </div>
+            ))}
+            <div className="flex justify-between font-bold text-purple-600 text-[10px] uppercase tracking-widest mt-4">
+              <span>Ekuitas</span>
+            </div>
+            {equityAccounts.map(acc => (
+               <div key={acc.id} className="flex justify-between text-sm">
+                 <span>{acc.name}</span>
+                 <span className="font-mono">Rp {getBalance(acc).toLocaleString('id-ID')}</span>
+               </div>
+            ))}
+            <div className="flex justify-between text-sm">
+               <span>Laba Ditahan (Laba Bersih)</span>
+               <span className="font-mono text-emerald-600">Rp {netIncome.toLocaleString('id-ID')}</span>
+            </div>
+
+            <div className="p-4 bg-slate-900 rounded-2xl flex justify-between items-center mt-8 text-white sticky bottom-0">
+              <span className="font-bold opacity-70">Total Passiva & Ekuitas</span>
+              <span className="font-black text-lg">Rp {totalLiabilityAndEquity.toLocaleString('id-ID')}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -507,6 +732,10 @@ export const KeuanganView = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [journalEntries, setJournalEntries] = useState<any[]>([]);
+
+  const [isAddTransactionOpen, setIsAddTransactionOpen] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [transactionForm, setTransactionForm] = useState({ description: '', amount: 0, type: 'income', category: 'Sales' });
 
   React.useEffect(() => {
     if (!auth.currentUser) return;
@@ -549,20 +778,157 @@ export const KeuanganView = () => {
     { id: 'akun', label: 'Edit Akun', icon: Settings },
   ];
 
-  const handleAddTransaction = async () => {
+  const handleSaveTransaction = async () => {
+    if (!transactionForm.description || !transactionForm.amount) return;
     try {
-      await firebaseService.create('transactions', {
-        date: serverTimestamp(),
-        description: 'Penjualan Kopi Batch #' + Math.floor(Math.random() * 100),
-        amount: Math.floor(Math.random() * 5000000) + 1000000,
-        type: 'income',
-        category: 'Sales',
-        ownerId: auth.currentUser?.uid
-      });
+      if (editingTransactionId) {
+        await firebaseService.update('transactions', editingTransactionId, {
+          description: transactionForm.description,
+          amount: Number(transactionForm.amount),
+          type: transactionForm.type,
+          category: transactionForm.category,
+        });
+      } else {
+        await firebaseService.create('transactions', {
+          date: serverTimestamp(),
+          description: transactionForm.description,
+          amount: Number(transactionForm.amount),
+          type: transactionForm.type,
+          category: transactionForm.category,
+          ownerId: auth.currentUser?.uid
+        });
+      }
+      setIsAddTransactionOpen(false);
+      setEditingTransactionId(null);
+      setTransactionForm({ description: '', amount: 0, type: 'income', category: 'Sales' });
     } catch (e) {
       console.error(e);
     }
   };
+
+  const handleDeleteTransaction = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await firebaseService.delete('transactions', id);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const filteredTransactions = transactions.filter(t => {
+    if (selectedPeriod === 'Semua') return true;
+    const date = t.date?.toDate ? t.date.toDate() : new Date();
+    const now = new Date();
+    if (selectedPeriod === 'Harian') return date >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (selectedPeriod === 'Mingguan') {
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      return date >= startOfWeek;
+    }
+    if (selectedPeriod === 'Bulanan') return date >= new Date(now.getFullYear(), now.getMonth(), 1);
+    if (selectedPeriod === 'Tahunan') return date >= new Date(now.getFullYear(), 0, 1);
+    return true;
+  });
+
+  const handleExportTransactions = () => {
+    const data = [
+      ['Status', 'Deskripsi', 'Kategori', 'Tanggal', 'Tipe', 'Jumlah (Rp)'],
+      ...filteredTransactions.map(t => [
+        'Success',
+        t.description,
+        t.category,
+        t.date?.toDate ? t.date.toDate().toLocaleDateString('id-ID') : 'Baru saja',
+        t.type,
+        t.amount
+      ])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Transaksi');
+    XLSX.writeFile(wb, `Transaksi_${selectedPeriod}.xlsx`);
+  };
+
+  const generateDemoData = async () => {
+    if (!auth.currentUser) return;
+    if (!confirm('Generate 1 tahun data demo? Ini akan menambahkan banyak transaksi.')) return;
+    
+    try {
+      const now = new Date();
+      const categoriesIncome = ['Penjualan Produk', 'Layanan Jasa', 'Proyek Custom'];
+      const categoriesExpense = ['Bahan Baku', 'Gaji Karyawan', 'Operasional', 'Pemasaran', 'Sewa', 'Peralatan Kantor'];
+      
+      const payloadFns = [];
+      for (let i = 0; i < 365; i++) {
+        // 1-3 transactions per day
+        const numTransactions = Math.floor(Math.random() * 3) + 1;
+        const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i, Math.floor(Math.random() * 8) + 9, Math.floor(Math.random() * 60));
+        
+        for (let j = 0; j < numTransactions; j++) {
+           const isIncome = Math.random() > 0.4; // 60% chance of income
+           const category = isIncome ? categoriesIncome[Math.floor(Math.random() * categoriesIncome.length)] : categoriesExpense[Math.floor(Math.random() * categoriesExpense.length)];
+           const amount = isIncome 
+              ? Math.floor(Math.random() * 5000000) + 1000000 
+              : Math.floor(Math.random() * 2000000) + 500000;
+           
+           payloadFns.push(() => 
+             firebaseService.create('transactions', {
+               date: Timestamp.fromDate(currentDay),
+               description: `Demo ${isIncome ? 'Pendapatan' : 'Pengeluaran'} - ${category}`,
+               amount,
+               type: isIncome ? 'income' : 'expense',
+               category,
+               ownerId: auth.currentUser?.uid
+             })
+           );
+        }
+      }
+      
+      // Send carefully in chunks to avoid overwhelming the network
+      const chunkSize = 20;
+      for (let i = 0; i < payloadFns.length; i += chunkSize) {
+        const chunk = payloadFns.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(fn => fn()));
+      }
+      
+      alert('Berhasil membuat data demo 1 tahun!');
+    } catch (e) {
+      console.error(e);
+      alert('Gagal membuat data demo');
+    }
+  };
+
+  // Calculate Dynamic Overview Data
+  const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalExpense = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalBalance = totalIncome - totalExpense;
+
+  // Aggregate Category Data
+  const categoryMap: { [key: string]: number } = {};
+  filteredTransactions.filter(t => t.type === 'expense').forEach(t => {
+    categoryMap[t.category] = (categoryMap[t.category] || 0) + (Number(t.amount) || 0);
+  });
+  const dynamicCategoryData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
+
+  // Aggregate Chart Data based on time
+  const chartMap: { [key: string]: { income: number, expense: number } } = {};
+  filteredTransactions.forEach(t => {
+    const date = t.date?.toDate ? t.date.toDate() : new Date();
+    let label = '';
+    if (selectedPeriod === 'Harian') {
+      label = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    } else if (selectedPeriod === 'Mingguan') {
+      label = date.toLocaleDateString('id-ID', { weekday: 'short' });
+    } else if (selectedPeriod === 'Bulanan') {
+      label = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    } else {
+      label = date.toLocaleDateString('id-ID', { month: 'short' });
+    }
+    
+    if (!chartMap[label]) chartMap[label] = { income: 0, expense: 0 };
+    if (t.type === 'income') chartMap[label].income += (Number(t.amount) || 0);
+    else if (t.type === 'expense') chartMap[label].expense += (Number(t.amount) || 0);
+  });
+  const dynamicIncomeData = Object.entries(chartMap).map(([label, data]) => ({ month: label, ...data }));
 
   return (
     <div className="space-y-8">
@@ -572,17 +938,79 @@ export const KeuanganView = () => {
           <p className="text-slate-500">Kelola arus kas dan pembukuan standar akuntansi bisnis Anda.</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-all">
+          <button 
+            onClick={generateDemoData}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-medium hover:bg-rose-100 transition-all"
+          >
+            <Database className="w-4 h-4" /> Data Demo
+          </button>
+          <button 
+            onClick={handleExportTransactions}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-all"
+          >
             <Download className="w-4 h-4" /> Export CSV
           </button>
           <button 
-            onClick={handleAddTransaction}
+            onClick={() => setIsAddTransactionOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
           >
             <Plus className="w-4 h-4" /> Transaksi Baru
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {isAddTransactionOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-slate-50 p-5 rounded-3xl border border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-4 shadow-inner"
+          >
+            <input 
+              placeholder="Deskripsi" 
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+              value={transactionForm.description}
+              onChange={e => setTransactionForm({...transactionForm, description: e.target.value})}
+            />
+            <input 
+              type="number"
+              placeholder="Jumlah (Rp)" 
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+              value={transactionForm.amount || ''}
+              onChange={e => setTransactionForm({...transactionForm, amount: Number(e.target.value)})}
+            />
+            <select 
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+              value={transactionForm.type}
+              onChange={e => setTransactionForm({...transactionForm, type: e.target.value})}
+            >
+              <option value="income">Pemasukan</option>
+              <option value="expense">Pengeluaran</option>
+            </select>
+            <input 
+              placeholder="Kategori" 
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+              value={transactionForm.category}
+              onChange={e => setTransactionForm({...transactionForm, category: e.target.value})}
+            />
+            <div className="flex gap-2">
+              <button 
+                onClick={handleSaveTransaction}
+                className="bg-indigo-600 text-white rounded-xl font-bold text-sm py-2.5 flex-1"
+              >
+                Simpan
+              </button>
+              <button 
+                onClick={() => setIsAddTransactionOpen(false)}
+                className="bg-slate-200 text-slate-700 rounded-xl font-bold text-sm p-2.5"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex overflow-x-auto items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 w-full sm:w-fit scrollbar-hide">
         {tabs.map((tab) => (
@@ -614,22 +1042,22 @@ export const KeuanganView = () => {
             <div className="bg-indigo-600 rounded-3xl p-5 md:p-6 text-white overflow-hidden relative group shadow-lg shadow-indigo-100 col-span-1 sm:col-span-2 lg:col-span-1">
               <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
               <p className="text-indigo-100/80 text-xs font-medium mb-1">Total Saldo Kas</p>
-              <h2 className="text-2xl md:text-3xl font-black mb-4 tracking-tight">Rp 128.45jt</h2>
+              <h2 className="text-2xl md:text-3xl font-black mb-4 tracking-tight">Rp {totalBalance.toLocaleString('id-ID')}</h2>
               <div className="flex items-center gap-2 text-indigo-50 text-[10px] font-bold bg-white/10 w-fit px-2 py-1 rounded-lg">
-                <ArrowUpRight className="w-3 h-3" /> +Rp 12.5M vs bln lalu
+                Status Terkini
               </div>
             </div>
             
             <div className="bg-white rounded-3xl p-5 md:p-6 border border-slate-100 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
-                  <ArrowDownLeft className="w-4 h-4 md:w-5 md:h-5" />
+                   <ArrowDownLeft className="w-4 h-4 md:w-5 md:h-5" />
                 </div>
                 <p className="text-slate-400 text-[10px] md:text-xs font-black uppercase tracking-widest">Pemasukan</p>
               </div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-1">Rp 42.18jt</h2>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-1">Rp {totalIncome.toLocaleString('id-ID')}</h2>
               <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                <ArrowUpRight className="w-3 h-3" /> 8.2% Growth
+                Total Riwayat Pemasukan
               </p>
             </div>
 
@@ -640,9 +1068,9 @@ export const KeuanganView = () => {
                 </div>
                 <p className="text-slate-400 text-[10px] md:text-xs font-black uppercase tracking-widest">Pengeluaran</p>
               </div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-1">Rp 18.92jt</h2>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-1">Rp {totalExpense.toLocaleString('id-ID')}</h2>
               <p className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
-                <ArrowDownLeft className="w-3 h-3" /> 4.1% Reduced
+                 Total Riwayat Pengeluaran
               </p>
             </div>
           </div>
@@ -669,7 +1097,7 @@ export const KeuanganView = () => {
               </div>
               <div className="h-[250px] md:h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={incomeData}>
+                  <LineChart data={dynamicIncomeData.length > 0 ? dynamicIncomeData : incomeData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
                     <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
@@ -700,7 +1128,7 @@ export const KeuanganView = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={categoryData}
+                      data={dynamicCategoryData.length > 0 ? dynamicCategoryData : categoryData}
                       cx="50%"
                       cy="50%"
                       innerRadius={50}
@@ -708,7 +1136,7 @@ export const KeuanganView = () => {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {categoryData.map((entry, index) => (
+                      {(dynamicCategoryData.length > 0 ? dynamicCategoryData : categoryData).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -717,13 +1145,15 @@ export const KeuanganView = () => {
                 </ResponsiveContainer>
               </div>
               <div className="space-y-3 mt-6">
-                {categoryData.map((cat, i) => (
+                {(dynamicCategoryData.length > 0 ? dynamicCategoryData : categoryData).map((cat, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i] }}></div>
-                      <span className="text-xs font-medium text-slate-600">{cat.name}</span>
+                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
+                       <span className="text-xs font-medium text-slate-600">{cat.name}</span>
                     </div>
-                    <span className="text-xs font-bold text-slate-900">{((cat.value / 1300) * 100).toFixed(0)}%</span>
+                    <span className="text-xs font-bold text-slate-900">
+                      {totalExpense > 0 ? ((cat.value / totalExpense) * 100).toFixed(0) : 0}%
+                    </span>
                   </div>
                 ))}
               </div>
@@ -736,8 +1166,10 @@ export const KeuanganView = () => {
               <h3 className="font-bold text-sm md:text-base">Transaksi Terbaru</h3>
               <button className="text-[10px] font-bold text-indigo-600 hover:underline uppercase tracking-tight">Lihat Semua</button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left min-w-[600px]">
+            
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left">
                 <thead className="bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Status</th>
@@ -745,11 +1177,12 @@ export const KeuanganView = () => {
                     <th className="px-6 py-4">Kategori</th>
                     <th className="px-6 py-4">Tanggal</th>
                     <th className="px-6 py-4 text-right">Jumlah</th>
+                    <th className="px-6 py-4 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {transactions.length > 0 ? transactions.map((t, i) => (
-                    <tr key={t.id || i} className="hover:bg-slate-50 transition-colors group cursor-pointer">
+                  {filteredTransactions.length > 0 ? filteredTransactions.map((t, i) => (
+                    <tr key={t.id || i} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-4">
                         <span className="px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700">
                           Success
@@ -766,16 +1199,68 @@ export const KeuanganView = () => {
                       )}>
                         {t.type === 'income' ? '+' : '-'} Rp {t.amount?.toLocaleString() || 0}
                       </td>
+                      <td className="px-6 py-4 text-right">
+                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); setEditingTransactionId(t.id); setTransactionForm({ ...t, amount: t.amount || 0 }); setIsAddTransactionOpen(true); }}
+                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            >
+                             <Edit2 className="w-4 h-4" />
+                           </button>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(t.id); }}
+                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                             <Trash2 className="w-4 h-4" />
+                           </button>
+                         </div>
+                      </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                        Belum ada transaksi. Tambahkan sekarang!
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                        Belum ada transaksi di periode ini.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card List */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredTransactions.length > 0 ? filteredTransactions.map((t, i) => (
+                <div key={t.id || i} className="p-4 space-y-3 group">
+                  <div className="flex justify-between items-start">
+                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-100">
+                      Success
+                    </span>
+                    <div className="flex items-center gap-2">
+                       <span className="text-[10px] text-slate-400 font-bold">
+                         {t.date instanceof Date ? t.date.toLocaleDateString() : t.date?.toDate?.()?.toLocaleDateString() || 'Sekarang'}
+                       </span>
+                       <button onClick={(e) => { e.stopPropagation(); setEditingTransactionId(t.id); setTransactionForm({ ...t, amount: t.amount || 0 }); setIsAddTransactionOpen(true); }} className="text-slate-400 hover:text-indigo-600">
+                          <Edit2 className="w-3 h-3" />
+                       </button>
+                       <button onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(t.id); }} className="text-slate-400 hover:text-rose-600">
+                          <Trash2 className="w-3 h-3" />
+                       </button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-slate-900 text-sm">{t.description}</p>
+                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{t.category}</p>
+                  </div>
+                  <div className={cn(
+                    "text-right font-black text-lg",
+                    t.type === 'income' ? "text-emerald-600" : "text-rose-600"
+                  )}>
+                    {t.type === 'income' ? '+' : '-'} Rp {t.amount?.toLocaleString() || 0}
+                  </div>
+                </div>
+              )) : (
+                <div className="p-8 text-center text-slate-400 italic text-sm">Belum ada transaksi di periode ini</div>
+              )}
             </div>
           </div>
         </div>

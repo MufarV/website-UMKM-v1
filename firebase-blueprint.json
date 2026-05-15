@@ -134,6 +134,84 @@
         "employeeIds": { "type": "array" }
       },
       "required": ["name"]
+    },
+    "production_plans": {
+      "title": "Production Plans",
+      "description": "Daily production plan notes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["date", "notes"]
+    },
+    "production_logs": {
+      "title": "Production Logs",
+      "description": "Daily production logs/history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "quantityChange": { "type": "number" },
+        "type": { "type": "string" },
+        "note": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["date", "itemId", "quantityChange", "type"]
+    },
+    "production_products": {
+      "title": "Produk",
+      "description": "Daftar produk dengan kategori fix dan pengembangan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["Fix", "Pengembangan"] },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["name", "category"]
+    },
+    "sarpra_assets": {
+      "title": "Sarpra Assets",
+      "description": "Company physical assets and equipment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownership": { "type": "string" },
+        "quantity": { "type": "number" },
+        "status": { "type": "string" },
+        "icon": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["name", "ownership", "quantity", "status"]
+    },
+    "sarpra_logs": {
+      "title": "Sarpra Logs",
+      "description": "Service and maintenance logs for assets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "assetId": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["assetId", "date", "notes"]
     }
   },
   "firestore": {
@@ -176,6 +254,26 @@
     "/divisions/{divisionId}": {
       "schema": "divisions",
       "description": "Koleksi data divisi organisasi."
+    },
+    "/production_plans/{planId}": {
+      "schema": "production_plans",
+      "description": "Daily production plan notes."
+    },
+    "/production_logs/{logId}": {
+      "schema": "production_logs",
+      "description": "Daily production logs/history."
+    },
+    "/production_products/{productId}": {
+      "schema": "production_products",
+      "description": "Koleksi data produk."
+    },
+    "/sarpra_assets/{assetId}": {
+      "schema": "sarpra_assets",
+      "description": "Company physical assets and equipment."
+    },
+    "/sarpra_logs/{logId}": {
+      "schema": "sarpra_logs",
+      "description": "Service and maintenance logs for assets."
     }
   }
 }

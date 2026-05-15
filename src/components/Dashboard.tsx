@@ -160,22 +160,23 @@ export const Dashboard = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.05 }}
             key={i} 
-            className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
+            className="bg-white/70 backdrop-blur-xl p-5 md:p-6 rounded-3xl border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all relative overflow-hidden"
           >
-            <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-1">
-              <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-tight">{stat.value}</h3>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none"></div>
+            <p className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wider mb-2">{stat.label}</p>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-2">
+              <h3 className="text-2xl md:text-3xl font-black text-slate-800 leading-tight">{stat.value}</h3>
               <span className={cn(
-                "text-[8px] md:text-[10px] font-black px-1.5 py-0.5 rounded w-fit",
-                stat.color.replace('bg-', 'text-').replace('500', '600'),
-                stat.color.replace('bg-', 'bg-').replace('500', '50')
+                "text-[9px] md:text-[10px] font-bold px-2 py-1 rounded-lg w-fit shadow-sm",
+                stat.color.replace('bg-', 'text-').replace('500', '700'),
+                stat.color.replace('bg-', 'bg-').replace('500', '100')
               )}>
-                {stat.change.split(' ')[0]}
+                {stat.change}
               </span>
             </div>
-            <div className="w-full h-1 bg-slate-100 mt-4 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-slate-200/50 mt-5 rounded-full overflow-hidden">
               <div 
-                className={cn("h-full transition-all duration-1000", stat.color)} 
+                className={cn("h-full transition-all duration-1000 rounded-full", stat.color)} 
                 style={{ width: `${stat.progress}%` }}
               ></div>
             </div>
@@ -183,10 +184,11 @@ export const Dashboard = () => {
         ))}
       </div>
 
-
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Chart Visualization */}
-        <div className="lg:col-span-8 bg-white p-5 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+        <div className="lg:col-span-8 bg-white/70 backdrop-blur-xl p-5 md:p-8 rounded-[2rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-200/30 rounded-full blur-3xl -ml-32 -mt-32 pointer-events-none"></div>
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 md:mb-8 gap-3">
             <div>
               <h4 className="font-bold text-slate-800 text-sm md:text-base">Grafik Performa</h4>
@@ -244,8 +246,11 @@ export const Dashboard = () => {
         </div>
 
         {/* Reporting & Decisions */}
-        <div className="lg:col-span-4 bg-indigo-900 p-6 md:p-8 rounded-3xl text-white flex flex-col shadow-xl">
-          <div className="flex items-center gap-3 mb-6">
+        <div className="lg:col-span-4 bg-indigo-900 p-6 md:p-8 rounded-[2rem] text-white flex flex-col shadow-2xl relative overflow-hidden backdrop-blur-xl">
+          <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-fuchsia-500/30 rounded-full blur-[80px] pointer-events-none mix-blend-screen"></div>
+          <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-500/20 rounded-full blur-[60px] pointer-events-none mix-blend-screen"></div>
+          
+          <div className="flex items-center gap-3 mb-6 relative z-10">
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
