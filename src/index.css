@@ -56,3 +56,82 @@ body {
   }
 }
 
+/* Print Styles */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+  
+  html, body {
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+  }
+
+  /* Hide navigation, headers, and UI controls */
+  aside, 
+  header, 
+  button, 
+  nav,
+  .print-hide,
+  input[type="month"],
+  input[type="week"],
+  input[type="date"] {
+    display: none !important;
+  }
+  
+  /* Select boxes mapping */
+  select {
+     appearance: none;
+     border: none !important;
+     background: transparent !important;
+  }
+
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: white !important;
+  }
+
+  /* Remove shadows and rounded corners for cleaner printing */
+  .shadow-sm, .shadow-lg, .shadow-xl {
+    box-shadow: none !important;
+  }
+  
+  .rounded-3xl, .rounded-2xl, .rounded-xl, .rounded-lg {
+    border-radius: 4px !important;
+  }
+
+  /* Force background colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Un-scroll everything so elements don't get cut off */
+  .overflow-x-auto, 
+  .overflow-y-auto, 
+  .custom-scrollbar,
+  .max-h-\[400px\] {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Ensure charts break nicely */
+  .recharts-wrapper {
+    page-break-inside: avoid;
+  }
+
+  /* Adjust grid layouts for print (assume A4 width) */
+  .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+

@@ -14,7 +14,10 @@ import {
   X,
   Check,
   Edit2,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Database
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +27,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 export const PesananView = () => {
   const [orders, setOrders] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'daftar' | 'bulanan'>('daftar');
+  const [currentMonthPesanan, setCurrentMonthPesanan] = useState(new Date());
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,6 +108,17 @@ export const PesananView = () => {
 window.addEventListener('DOMContentLoaded', () => {
     loadKatalogMenu();
     loadReviews();
+    
+    const selectHari = document.getElementById('select_hari');
+    const selectJam = document.getElementById('select_jam');
+    
+    if (selectHari && selectJam) {
+        const updateSlot = () => updateTampilanSlot(selectHari.value, selectJam.value);
+        selectHari.addEventListener('change', updateSlot);
+        selectJam.addEventListener('change', updateSlot);
+        // initial call
+        setTimeout(updateSlot, 500); // give time to populate options if needed
+    }
 });
 
 // Fungsi untuk mengecek status buka/tutup toko
@@ -187,6 +203,67 @@ async function loadKatalogMenu() {
         });
         console.log("Katalog Terkoneksi:", products);
       }
+
+      // Update Opsi Open PO Dates & Times
+      window.__poDatesConfig = fields.poDatesConfig?.mapValue?.fields || {};
+      const openPoDates = (fields.openPoDates?.arrayValue?.values || []).map(v => v.stringValue);
+      
+      const selectHari = document.getElementById('select_hari');
+      if (selectHari && openPoDates.length > 0) {
+        selectHari.innerHTML = '';
+        openPoDates.forEach(dateStr => {
+          const opt = document.createElement('option');
+          opt.value = dateStr;
+          // Format date for better readability if desired, or keep as YYYY-MM-DD
+          const d = new Date(dateStr);
+          opt.textContent = isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+          selectHari.appendChild(opt);
+        });
+        
+        // Trigger population of times
+        const selectJam = document.getElementById('select_jam');
+        if (selectJam) {
+            const populateTimes = () => {
+                const selectedDate = selectHari.value;
+                const poConfig = window.__poDatesConfig[selectedDate]?.mapValue?.fields;
+                selectJam.innerHTML = '';
+                if (poConfig && poConfig.times && poConfig.times.arrayValue.values) {
+                    poConfig.times.arrayValue.values.forEach(tOpt => {
+                       if (tOpt.stringValue) {
+                          const opt = document.createElement('option');
+                          opt.value = tOpt.stringValue;
+                          opt.textContent = tOpt.stringValue;
+                          selectJam.appendChild(opt);
+                       }
+                    });
+                } else {
+                    // Fallback to default poTimes if per-date config not found
+                    const fallbackTimes = (fields.poTimes?.arrayValue?.values || []).map(v => v.stringValue);
+                    if (fallbackTimes.length > 0) {
+                        fallbackTimes.forEach(t => {
+                            const opt = document.createElement('option');
+                            opt.value = t;
+                            opt.textContent = t;
+                            selectJam.appendChild(opt);
+                        });
+                    } else {
+                       const opt = document.createElement('option');
+                       opt.value = "Pagi";
+                       opt.textContent = "Sesi Pagi";
+                       selectJam.appendChild(opt);
+                    }
+                }
+                // trigger slot update
+                if(typeof updateTampilanSlot === 'function') {
+                   updateTampilanSlot(selectHari.value, selectJam.value);
+                }
+            };
+            
+            selectHari.removeEventListener('change', populateTimes);
+            selectHari.addEventListener('change', populateTimes);
+            populateTimes(); // initial load
+        }
+      }
     }
   } catch(e) { console.error("Gagal sinkron menu:", e); }
 }
@@ -242,7 +319,7 @@ async function updateTampilanSlot(hari, jam) {
               (pd.documents || []).forEach(d => {
                   const df = d.fields;
                   if (df && df.ownerId?.stringValue === '${uid}' && df.status?.stringValue !== 'Dibatalkan' && df.tanggal_po?.stringValue === hari && df.waktu_po?.stringValue === jam) {
-                      count += parseInt(df.totalPcs?.integerValue || 1);
+                      count += parseInt(df.totalPcs?.integerValue || df.totalPcs?.stringValue || df.totalPcs?.doubleValue || df.total_pcs?.integerValue || df.total_pcs?.stringValue || df.total_pcs?.doubleValue || 1);
                   }
               });
               el.innerText = "Sisa Slot: " + Math.max(0, limit - count) + " pcs";
@@ -420,6 +497,47 @@ async function kirimPesanan() {
     setIsAddingOrder(true);
   };
 
+  const handleAddDemoData = async () => {
+    const statuses = ['Baru', 'Diproses', 'Dikirim', 'Selesai'];
+    const names = ['Budi Santoso', 'Siti Aminah', 'Joko Susilo', 'Rini Wulandari', 'Tono Pratama', 'Ayu Lestari', 'Dedi Mulyadi', 'Nina Marlina', 'Rudi Heryanto', 'Dewi Sartika'];
+    const dates = storeSettings?.openPoDates?.length > 0 ? storeSettings.openPoDates : [new Date().toLocaleDateString('id-ID'), new Date(Date.now() - 86400000).toLocaleDateString('id-ID'), new Date(Date.now() - 172800000).toLocaleDateString('id-ID')];
+    const times = storeSettings?.poTimes?.length > 0 ? storeSettings.poTimes : ['12:00', '16:00', '20:00'];
+    
+    // add randomly 10-15 orders
+    const count = Math.floor(Math.random() * 6) + 10;
+    
+    try {
+        for (let i = 0; i < count; i++) {
+            const randomDate = dates[Math.floor(Math.random() * dates.length)];
+            const randomTime = times[Math.floor(Math.random() * times.length)];
+            const items = [{ name: 'Cilok Bumbu Kacang', quantity: Math.floor(Math.random() * 5) + 1, price: 15000 }];
+            if (Math.random() > 0.5) {
+               items.push({ name: 'Cilok Kuah Pedas', quantity: Math.floor(Math.random() * 3) + 1, price: 18000 });
+            }
+            const totalPcs = items.reduce((acc, curr) => acc + curr.quantity, 0);
+            const totalHarga = items.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
+            
+            await firebaseService.create('pesanan', {
+                customerName: names[Math.floor(Math.random() * names.length)],
+                itemsData: items,
+                totalPcs: totalPcs,
+                totalHarga: totalHarga,
+                totalAmount: totalHarga,
+                whatsappNumber: "0812" + Math.floor(Math.random() * 10000000),
+                pickupMethod: Math.random() > 0.5 ? 'Ambil di Tempat' : 'Kirim GoSend',
+                paymentMethod: Math.random() > 0.5 ? 'Transfer' : 'Tunai',
+                tanggal_po: randomDate,
+                waktu_po: randomTime,
+                status: statuses[Math.floor(Math.random() * statuses.length)],
+                createdAt: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString()
+            });
+        }
+        alert('Data demo berhasil ditambahkan!');
+    } catch {
+        alert('Gagal menambahkan data demo.');
+    }
+  };
+
   const handleDeleteOrder = async (id: string) => {
     if (confirmDeleteId === id) {
       try {
@@ -539,6 +657,12 @@ async function kirimPesanan() {
         </div>
         <div className="flex gap-3 relative z-10 w-full md:w-auto">
           <button 
+            onClick={() => handleAddDemoData()}
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl font-black text-sm hover:bg-emerald-100 transition-all shadow-xl shadow-slate-200/50"
+          >
+            <Database className="w-4 h-4" /> DATA DEMO
+          </button>
+          <button 
             onClick={() => setShowIntegrationModal(true)}
             className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-indigo-600 border border-indigo-100 rounded-2xl font-black text-sm hover:bg-slate-50 transition-all shadow-xl shadow-slate-200/50"
           >
@@ -572,7 +696,31 @@ async function kirimPesanan() {
         ))}
       </div>
 
-      <div className="bg-white/90 backdrop-blur-2xl rounded-[2.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
+      {/* Tabs */}
+      <div className="flex gap-2 p-1 bg-slate-100/80 w-fit rounded-xl">
+        <button 
+          onClick={() => setActiveTab('daftar')}
+          className={cn(
+            "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+            activeTab === 'daftar' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          Daftar & Rekap Harian
+        </button>
+        <button 
+          onClick={() => setActiveTab('bulanan')}
+          className={cn(
+            "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+            activeTab === 'bulanan' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          Rekapitulasi Bulanan
+        </button>
+      </div>
+
+      {activeTab === 'daftar' && (
+        <>
+          <div className="bg-white/90 backdrop-blur-2xl rounded-[2.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h2 className="text-xl font-black text-slate-800 mb-1">Rekapitulasi Harian</h2>
@@ -819,6 +967,61 @@ async function kirimPesanan() {
           })}
         </div>
       </div>
+    </>
+  )}
+
+      {activeTab === 'bulanan' && (
+        <div className="bg-white/90 backdrop-blur-2xl rounded-[2.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
+           <div className="flex justify-between items-center mb-8">
+             <h3 className="text-xl font-bold text-slate-900">Kalender Rekapitulasi Pesanan</h3>
+             <div className="flex items-center gap-4 bg-slate-50 px-2 py-1 rounded-xl border border-slate-200">
+               <button onClick={() => setCurrentMonthPesanan(new Date(currentMonthPesanan.getFullYear(), currentMonthPesanan.getMonth() - 1, 1))} className="p-2 text-slate-500 hover:text-indigo-600 border border-transparent hover:border-slate-200 hover:bg-white rounded-lg transition-colors shadow-sm"><ChevronLeft className="w-5 h-5" /></button>
+               <span className="font-extrabold text-sm text-slate-700 min-w-[120px] text-center">{currentMonthPesanan.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</span>
+               <button onClick={() => setCurrentMonthPesanan(new Date(currentMonthPesanan.getFullYear(), currentMonthPesanan.getMonth() + 1, 1))} className="p-2 text-slate-500 hover:text-indigo-600 border border-transparent hover:border-slate-200 hover:bg-white rounded-lg transition-colors shadow-sm"><ChevronRight className="w-5 h-5" /></button>
+             </div>
+           </div>
+           
+           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-2 md:gap-3">
+             {Array.from({ length: new Date(currentMonthPesanan.getFullYear(), currentMonthPesanan.getMonth() + 1, 0).getDate() }).map((_, i) => {
+               const day = i + 1;
+               const dateObj = new Date(currentMonthPesanan.getFullYear(), currentMonthPesanan.getMonth(), day);
+               const dateStr = `${currentMonthPesanan.getFullYear()}-${String(currentMonthPesanan.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+               const alternateDateStr = dateObj.toLocaleDateString('id-ID'); // Sometimes it's localized
+               
+               // robust today check covering timezone diffs
+               const now = new Date();
+               const isToday = dateObj.getFullYear() === now.getFullYear() && dateObj.getMonth() === now.getMonth() && dateObj.getDate() === now.getDate();
+               
+               // Count pcs for this date
+               let sumPcs = 0;
+               orders.forEach(o => {
+                  if (o.status !== 'Dibatalkan' && (o.tanggal_po === dateStr || o.tanggal_po === alternateDateStr)) {
+                      sumPcs += Number(o.totalPcs || o.total_pcs || 1);
+                  }
+               });
+               
+               return (
+                 <div key={dateStr} className={cn("border rounded-2xl p-3 min-h-[100px] flex flex-col transition-all group", isToday ? "border-indigo-400 bg-indigo-50/50 shadow-sm shadow-indigo-100" : "border-slate-200 hover:border-indigo-200 hover:shadow-sm bg-white")}>
+                   <div className="flex flex-col mb-2">
+                     <span className={cn("font-bold text-[10px] uppercase tracking-wider", isToday ? "text-indigo-600" : "text-slate-400")}>
+                        {dateObj.toLocaleDateString('id-ID', { weekday: 'short' })}
+                     </span>
+                     <span className={cn("font-black text-base", isToday ? "text-indigo-600" : "text-slate-700")}>
+                        {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                     </span>
+                   </div>
+                   <div className="mt-auto">
+                      <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-50 border border-slate-100 group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
+                          <span className="text-xl font-black text-slate-800 group-hover:text-indigo-700">{sumPcs}</span>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-indigo-500">Pcs</span>
+                      </div>
+                   </div>
+                 </div>
+               );
+             })}
+           </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {isAddingOrder && (

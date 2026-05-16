@@ -1,8 +1,6 @@
 {
   "name": "Wirausaha Muda Hub",
   "description": "Sistem manajemen UMKM terpadu untuk pengusaha muda: Manajemen, Pemasaran, Keuangan, Produksi, dan Analisis AI.",
-  "requestFramePermissions": [
-    "geolocation"
-  ],
+  "requestFramePermissions": [],
   "majorCapabilities": []
 }

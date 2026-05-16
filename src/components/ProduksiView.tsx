@@ -18,9 +18,10 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 
 export const ProduksiView = () => {
@@ -39,6 +40,8 @@ export const ProduksiView = () => {
   // Planner State
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [plans, setPlans] = useState<any[]>([]);
+  const [editingPlanDate, setEditingPlanDate] = useState<string | null>(null);
+  const [planForm, setPlanForm] = useState<{notes: string, capacity: number | string}>({ notes: '', capacity: '' });
   
   // Logs State
   const [logs, setLogs] = useState<any[]>([]);
@@ -48,6 +51,7 @@ export const ProduksiView = () => {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [productForm, setProductForm] = useState<any>({ category: 'Fix' });
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<string | null>(null);
 
   // Subscriptions
   useEffect(() => {
@@ -151,21 +155,34 @@ export const ProduksiView = () => {
     setDeletingItem(null);
   };
 
-  const updatePlanNote = async (dateStr: string, notes: string) => {
+  const handleUpdateCapacity = async (dateStr: string, capacity: string) => {
     const existing = plans.find(p => p.date === dateStr);
-    if (!notes.trim() && existing) {
-       await firebaseService.delete('production_plans', existing.id);
-       fetchPlans(currentMonth);
-       return;
-    }
-    if (!notes.trim()) return;
-
+    const numCap = Number(capacity) || 0;
+    
     if (existing) {
-      await firebaseService.update('production_plans', existing.id, { notes });
-    } else {
-      await firebaseService.create('production_plans', { date: dateStr, notes });
+      await firebaseService.update('production_plans', existing.id, { capacity: numCap });
+    } else if (numCap > 0) {
+      await firebaseService.create('production_plans', { date: dateStr, notes: '', capacity: numCap });
     }
     fetchPlans(currentMonth);
+  };
+
+  const handleSavePlanNote = async () => {
+    if (!editingPlanDate) return;
+    const existing = plans.find(p => p.date === editingPlanDate);
+    
+    if (existing) {
+      await firebaseService.update('production_plans', existing.id, { notes: planForm.notes });
+    } else if (planForm.notes.trim() || Number(planForm.capacity) > 0) {
+      await firebaseService.create('production_plans', { 
+        date: editingPlanDate, 
+        notes: planForm.notes, 
+        capacity: Number(planForm.capacity) || 0 
+      });
+    }
+    
+    fetchPlans(currentMonth);
+    setEditingPlanDate(null);
   };
 
   const handleSaveProduct = async () => {
@@ -192,9 +209,8 @@ export const ProduksiView = () => {
 
   const handleDeleteProduct = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm("Hapus produk ini?")) {
-      await firebaseService.delete('production_products', id);
-    }
+    await firebaseService.delete('production_products', id);
+    setDeletingProduct(null);
   };
 
   const getStatus = (stock: number, minStock: number) => {
@@ -501,13 +517,39 @@ export const ProduksiView = () => {
                         {dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                      </span>
                    </div>
-                   <textarea 
-                     key={`textarea-${dateStr}`}
-                     className="w-full flex-1 bg-transparent resize-y text-xs md:text-sm leading-relaxed font-medium text-slate-700 outline-none placeholder:text-slate-300 opacity-80 group-hover:opacity-100 transition-opacity rounded-xl border border-transparent hover:border-slate-100 focus:border-indigo-200 focus:bg-white p-2 -mx-2"
-                     placeholder="Masukan rencana & catatan produksi..."
-                     defaultValue={plan?.notes || ''}
-                     onBlur={(e) => updatePlanNote(dateStr, e.target.value)}
-                   />
+                   
+                   <div className="mt-auto pt-4 flex items-center justify-between gap-3">
+                     <button 
+                       onClick={() => {
+                         setEditingPlanDate(dateStr);
+                         setPlanForm({ notes: plan?.notes || '', capacity: plan?.capacity || '' });
+                       }}
+                       className={cn(
+                          "relative p-3 rounded-xl border transition-all duration-300 hover:-translate-y-0.5",
+                          plan?.notes?.trim() 
+                            ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm" 
+                            : "bg-slate-50 border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300"
+                       )}
+                       title="Catatan Produksi"
+                     >
+                       <FileText className="w-5 h-5" />
+                       {plan?.notes?.trim() && (
+                         <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-rose-500 rounded-full border-2 border-white shadow-sm" />
+                       )}
+                     </button>
+                     
+                     <div className="flex flex-col items-end flex-1">
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Kapasitas</span>
+                       <input 
+                         type="number"
+                         min="0"
+                         className="w-full max-w-[100px] text-right bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 ring-indigo-50 shadow-sm transition-all"
+                         placeholder="0"
+                         defaultValue={plan?.capacity || ''}
+                         onBlur={(e) => handleUpdateCapacity(dateStr, e.target.value)}
+                       />
+                     </div>
+                   </div>
                  </div>
                );
              })}
@@ -603,16 +645,21 @@ export const ProduksiView = () => {
                                <button onClick={handleSaveProduct} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"><Save className="w-4 h-4" /></button>
                                <button onClick={() => setEditingProduct(null)} className="p-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"><X className="w-4 h-4" /></button>
                              </div>
+                           ) : deletingProduct === p.id ? (
+                             <div className="flex justify-end gap-2 animate-in slide-in-from-right-2 duration-200">
+                               <button onClick={(e) => handleDeleteProduct(p.id, e)} className="px-3 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors shadow-sm">Ya, Hapus</button>
+                               <button onClick={(e) => { e.stopPropagation(); setDeletingProduct(null); }} className="p-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"><X className="w-4 h-4" /></button>
+                             </div>
                            ) : (
                              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                <button 
-                                 onClick={() => { setEditingProduct(p.id); setProductForm({...p}); }}
+                                 onClick={() => { setEditingProduct(p.id); setProductForm({...p}); setDeletingProduct(null); }}
                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                 >
                                  <Edit2 className="w-4 h-4" />
                                </button>
                                <button 
-                                 onClick={(e) => handleDeleteProduct(p.id, e)}
+                                 onClick={(e) => { e.stopPropagation(); setDeletingProduct(p.id); }}
                                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                                 >
                                  <Trash2 className="w-4 h-4" />
@@ -636,6 +683,69 @@ export const ProduksiView = () => {
             </div>
         </div>
       )}
+
+      {/* Plan Note Modal */}
+      <AnimatePresence>
+        {editingPlanDate && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setEditingPlanDate(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="p-6 md:p-8 flex justify-between items-center border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 text-lg">Catatan Rencana Produksi</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(editingPlanDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEditingPlanDate(null)}
+                  className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-slate-50/50">
+                <textarea 
+                  className="w-full h-full min-h-[300px] p-6 bg-white rounded-2xl text-sm font-medium text-slate-700 border border-slate-200 outline-none focus:ring-4 ring-indigo-500/10 focus:border-indigo-400 transition-all resize-none shadow-sm"
+                  placeholder="Tuliskan catatan produksi, rincian, daftar bahan, atau instruksi khusus di sini..."
+                  value={planForm.notes}
+                  onChange={(e) => setPlanForm({ ...planForm, notes: e.target.value })}
+                />
+              </div>
+
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3">
+                <button 
+                  onClick={() => setEditingPlanDate(null)}
+                  className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl text-xs uppercase tracking-widest transition-colors"
+                >
+                  BATAL
+                </button>
+                <button 
+                  onClick={handleSavePlanNote}
+                  className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-indigo-200 transition-all"
+                >
+                  <Save className="w-4 h-4" /> SIMPAN CATATAN
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

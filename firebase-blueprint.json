@@ -236,6 +236,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "ownerId": { "type": "string" },
         "awareness": { "type": "number" },
         "interest": { "type": "number" },
         "action": { "type": "number" },
@@ -245,7 +246,9 @@
         "interestNotes": { "type": "string" },
         "actionNotes": { "type": "string" },
         "retentionNotes": { "type": "string" },
-        "advocacyNotes": { "type": "string" }
+        "advocacyNotes": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
       }
     },
     "marketing_calendar": {
@@ -254,12 +257,31 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "ownerId": { "type": "string" },
         "date": { "type": "string" },
         "note": { "type": "string" },
+        "longNote": { "type": "string" },
         "isHighlighted": { "type": "boolean" },
-        "type": { "type": "string", "enum": ["idea", "reminder", "highlight"] }
+        "type": { "type": "string", "enum": ["idea", "reminder", "highlight"] },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
       },
-      "required": ["date", "note"]
+      "required": ["date", "note", "ownerId"]
+    },
+    "marketing_stp": {
+      "title": "Marketing STP",
+      "description": "Segmentasi, Targeting, dan Positioning",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "segmentasi": { "type": "string" },
+        "targeting": { "type": "string" },
+        "positioning": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "object" },
+        "updatedAt": { "type": "object" }
+      },
+      "required": ["ownerId"]
     }
   },
   "firestore": {
@@ -334,6 +356,10 @@
     "/marketing_calendar/{noteId}": {
       "schema": "marketing_calendar",
       "description": "Catatan pemasaran harian."
+    },
+    "/marketing_stp/{stpId}": {
+      "schema": "marketing_stp",
+      "description": "Segmentasi, Targeting, dan Positioning"
     }
   }
 }

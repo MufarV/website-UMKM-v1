@@ -10,7 +10,12 @@ import {
   ShoppingCart,
   RefreshCw,
   Megaphone,
-  Heart
+  Heart,
+  FileText,
+  X,
+  Edit3,
+  AlignLeft,
+  Compass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
@@ -34,25 +39,39 @@ export const PemasaranView = () => {
   });
   const [isEditingJourney, setIsEditingJourney] = useState(false);
 
+  // STP State
+  const [stp, setStp] = useState({
+    segmentasi: '',
+    targeting: '',
+    positioning: ''
+  });
+  const [isEditingStp, setIsEditingStp] = useState(false);
+
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
   const [notes, setNotes] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState('');
+  const [longNoteInput, setLongNoteInput] = useState('');
   const [noteType, setNoteType] = useState<'idea' | 'reminder' | 'highlight'>('idea');
   const [isHighlighted, setIsHighlighted] = useState(false);
+  const [isLongNoteModalOpen, setIsLongNoteModalOpen] = useState(false);
 
   useEffect(() => {
-    let unsubJourney: any, unsubNotes: any;
+    let unsubJourney: any, unsubNotes: any, unsubStp: any;
     if (auth.currentUser) {
       unsubJourney = firebaseService.subscribe('marketing_journey', (data) => {
         if (data.length > 0) setJourney(data[0] as any);
       });
       unsubNotes = firebaseService.subscribe('marketing_calendar', setNotes);
+      unsubStp = firebaseService.subscribe('marketing_stp', (data) => {
+        if (data.length > 0) setStp(data[0] as any);
+      });
     }
     return () => {
       unsubJourney?.();
       unsubNotes?.();
+      unsubStp?.();
     };
   }, []);
 
@@ -68,12 +87,28 @@ export const PemasaranView = () => {
     } catch (e) { console.error(e); }
   };
 
+  const saveStp = async () => {
+    try {
+      const stpId = (stp as any).id;
+      if (stpId) {
+        await firebaseService.update('marketing_stp', stpId, stp);
+      } else {
+        await firebaseService.create('marketing_stp', stp);
+      }
+      setIsEditingStp(false);
+    } catch (e) { console.error(e); }
+  };
+
   const saveNote = async () => {
-    if (!selectedDate || !noteInput) return;
+    if (!selectedDate) return;
+    
+    const title = noteInput.trim() || 'Ide Tanpa Judul';
+    
     try {
       const existingNote = notes.find(n => n.date === selectedDate);
       const payload = { 
-        note: noteInput, 
+        note: title, 
+        longNote: longNoteInput,
         type: noteType, 
         isHighlighted,
         date: selectedDate,
@@ -85,8 +120,13 @@ export const PemasaranView = () => {
         await firebaseService.create('marketing_calendar', payload);
       }
       setNoteInput('');
+      setLongNoteInput('');
       setSelectedDate(null);
-    } catch (e) { console.error(e); }
+      setIsLongNoteModalOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert("Gagal menyimpan catatan: " + (e as Error).message);
+    }
   };
 
   // Calendar Helpers
@@ -117,8 +157,10 @@ export const PemasaranView = () => {
           onClick={() => {
             setSelectedDate(dateStr);
             setNoteInput(hasNote?.note || '');
+            setLongNoteInput(hasNote?.longNote || '');
             setNoteType(hasNote?.type || 'idea');
             setIsHighlighted(hasNote?.isHighlighted || false);
+            setIsLongNoteModalOpen(true);
           }}
           className={cn(
             "h-24 border border-slate-100 p-2 cursor-pointer transition-all hover:bg-indigo-50 relative group scrollbar-hide overflow-hidden",
@@ -137,12 +179,42 @@ export const PemasaranView = () => {
             {hasNote?.type === 'idea' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>}
           </div>
           {hasNote && (
-            <div className="mt-1">
+            <div className="mt-1 relative group-hover:block">
               <p className={cn(
                 "text-[8px] font-medium leading-tight line-clamp-3",
                 hasNote.isHighlighted ? "text-slate-900 font-bold" : "text-slate-600"
               )}>{hasNote.note}</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDate(dateStr);
+                  setNoteInput(hasNote?.note || '');
+                  setLongNoteInput(hasNote?.longNote || '');
+                  setNoteType(hasNote?.type || 'idea');
+                  setIsHighlighted(hasNote?.isHighlighted || false);
+                  setIsLongNoteModalOpen(true);
+                }}
+                className="absolute -bottom-1 -right-1 p-1 bg-white border border-slate-200 text-slate-500 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:bg-slate-50 shadow-sm"
+              >
+                <Edit3 className="w-3 h-3" /> Catatan
+              </button>
             </div>
+          )}
+          {!hasNote && (
+             <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDate(dateStr);
+                  setNoteInput('');
+                  setLongNoteInput('');
+                  setNoteType('idea');
+                  setIsHighlighted(false);
+                  setIsLongNoteModalOpen(true);
+                }}
+                className="absolute bottom-1 right-1 p-1 bg-white border border-slate-200 text-slate-500 rounded text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:bg-slate-50 shadow-sm"
+             >
+               <Plus className="w-3 h-3" /> Tambah
+             </button>
           )}
         </div>
       );
@@ -211,6 +283,78 @@ export const PemasaranView = () => {
           </div>
         </motion.div>
       )}
+
+      {/* STP Section */}
+      <div className="bg-white p-5 md:p-8 rounded-3xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+        <div className="flex items-center justify-between mb-6 md:mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-50 rounded-xl">
+              <Compass className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <h2 className="text-lg md:text-xl font-bold text-slate-800">Segmentasi, Targeting, Positioning (STP)</h2>
+              <p className="text-xs text-slate-500 font-medium">Fondasi strategi pemasaran brand Anda.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsEditingStp(!isEditingStp)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl font-bold text-xs text-indigo-600 hover:bg-indigo-100 transition-all active:scale-95"
+          >
+            <RefreshCw className="w-4 h-4" /> Edit STP
+          </button>
+        </div>
+
+        {isEditingStp ? (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100"
+          >
+            {[
+              { id: 'segmentasi', label: 'Segmentasi', placeholder: 'Siapa saja profil konsumen Anda secara umum?', icon: AlignLeft },
+              { id: 'targeting', label: 'Targeting', placeholder: 'Siapa target utama Anda?', icon: Target },
+              { id: 'positioning', label: 'Positioning', placeholder: 'Bagaimana brand Anda ingin diingat?', icon: Megaphone }
+            ].map(key => (
+              <div key={key.id} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <key.icon className="w-4 h-4 text-slate-500" />
+                  <label className="text-sm font-bold text-slate-700">{key.label}</label>
+                </div>
+                <textarea 
+                  rows={5}
+                  value={(stp as any)[key.id] || ''}
+                  onChange={(e) => setStp({ ...stp, [key.id]: e.target.value })}
+                  placeholder={key.placeholder}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none shadow-sm"
+                />
+              </div>
+            ))}
+            <div className="md:col-span-3 flex justify-end">
+              <button 
+                onClick={saveStp} 
+                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" /> Simpan STP
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {[
+              { id: 'segmentasi', label: 'Segmentasi', bg: 'bg-rose-50', color: 'text-rose-600', border: 'border-rose-100' },
+              { id: 'targeting', label: 'Targeting', bg: 'bg-amber-50', color: 'text-amber-600', border: 'border-amber-100' },
+              { id: 'positioning', label: 'Positioning', bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' }
+            ].map((item, i) => (
+              <div key={i} className={cn("p-5 rounded-2xl border", item.border, item.bg)}>
+                <h4 className={cn("text-sm font-black mb-3", item.color)}>{item.label}</h4>
+                <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                  {(stp as any)[item.id] || <span className="text-slate-400 italic">Belum ada {item.label.toLowerCase()} yang diatur.</span>}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Customer Journey Funnel */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -320,78 +464,102 @@ export const PemasaranView = () => {
                {renderCalendar()}
             </div>
 
-            <AnimatePresence>
-              {selectedDate && (
+            {isLongNoteModalOpen && selectedDate && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="mt-6 p-5 bg-slate-50 rounded-2xl border border-slate-200"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">
-                      Catatan: {new Date(selectedDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
-                    </p>
-                    <button onClick={() => setSelectedDate(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-lg"><Plus className="w-4 h-4 rotate-45" /></button>
+                  <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800">Catatan Tanggal</h2>
+                      <p className="text-xs text-slate-500 font-medium mt-1">
+                        {new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setIsLongNoteModalOpen(false);
+                        setSelectedDate(null);
+                      }}
+                      className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                    >
+                      <X className="w-5 h-5 text-slate-400" />
+                    </button>
                   </div>
                   
-                  <div className="space-y-4">
+                  <div className="p-5 md:p-6 overflow-y-auto space-y-5">
                     <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Ide / Judul Singkat</label>
                       <input 
-                        type="text" 
+                        type="text"
                         autoFocus
                         value={noteInput}
                         onChange={(e) => setNoteInput(e.target.value)}
-                        placeholder="Ide atau rencana pemasaran..."
-                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        placeholder="Tulis ide atau rencana..."
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
                       />
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
-                      <div className="flex gap-2">
-                        {[
-                          { id: 'idea', label: 'Ide', color: 'bg-indigo-500' },
-                          { id: 'reminder', label: 'Penting', color: 'bg-amber-500' },
-                          { id: 'highlight', label: 'Tonjolkan', color: 'bg-rose-500' }
-                        ].map(t => (
-                          <button
-                            key={t.id}
-                            onClick={() => setNoteType(t.id as any)}
-                            className={cn(
-                              "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
-                              noteType === t.id 
-                                ? `${t.color} text-white border-transparent shadow-lg shadow-indigo-100` 
-                                : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
-                            )}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Catatan Luas</label>
+                      <textarea 
+                        value={longNoteInput}
+                        onChange={(e) => setLongNoteInput(e.target.value)}
+                        placeholder="Tulis detail lengkap rencana, copywriting, atau strategi di sini..."
+                        rows={10}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+                      />
+                    </div>
 
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer group">
-                          <input 
-                            type="checkbox" 
-                            checked={isHighlighted}
-                            onChange={(e) => setIsHighlighted(e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-200 text-indigo-600 focus:ring-indigo-500/20"
-                          />
-                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-700">Beri Tanda Spesial</span>
-                        </label>
-                        
-                        <button 
-                          onClick={saveNote}
-                          className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 text-[10px] font-black uppercase tracking-widest"
-                        >
-                          <Save className="w-4 h-4" /> Simpan
-                        </button>
-                      </div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between pt-2">
+                       <div className="flex gap-2">
+                         {[
+                           { id: 'idea', label: 'Ide', color: 'bg-indigo-500' },
+                           { id: 'reminder', label: 'Penting', color: 'bg-amber-500' },
+                           { id: 'highlight', label: 'Tonjolkan', color: 'bg-rose-500' }
+                         ].map(t => (
+                           <button
+                             key={t.id}
+                             onClick={() => setNoteType(t.id as any)}
+                             className={cn(
+                               "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                               noteType === t.id 
+                                 ? `${t.color} text-white border-transparent shadow-[0_4px_12px_rgba(0,0,0,0.1)]` 
+                                 : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                             )}
+                           >
+                             {t.label}
+                           </button>
+                         ))}
+                       </div>
+
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <input 
+                           type="checkbox" 
+                           checked={isHighlighted}
+                           onChange={(e) => setIsHighlighted(e.target.checked)}
+                           className="w-4 h-4 rounded border-slate-200 text-indigo-600 focus:ring-indigo-500/20"
+                         />
+                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-slate-700">Beri Tanda Spesial</span>
+                       </label>
                     </div>
                   </div>
+                  
+                  <div className="p-5 md:p-6 border-t border-slate-100 flex justify-end">
+                    <button 
+                      onClick={saveNote}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-[10px] md:text-xs font-black uppercase tracking-widest"
+                    >
+                      <Save className="w-4 h-4" /> Simpan Catatan
+                    </button>
+                  </div>
                 </motion.div>
-              )}
-            </AnimatePresence>
+              </div>
+            )}
+            
+
           </div>
         </div>
       </div>

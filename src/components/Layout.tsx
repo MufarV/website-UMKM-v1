@@ -16,7 +16,8 @@ import {
   LogOut,
   Bell,
   Search,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -89,10 +90,13 @@ export const Layout = ({ children, activeView, setActiveView }: {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
+  const handleLogin = async (forceSelect = false) => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     const provider = new GoogleAuthProvider();
+    if (forceSelect) {
+      provider.setCustomParameters({ prompt: 'select_account' });
+    }
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
@@ -219,16 +223,28 @@ export const Layout = ({ children, activeView, setActiveView }: {
               </div>
             )}
             {user ? (
-              <button 
-                onClick={handleLogout}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl w-full text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all font-medium",
-                  (!isSidebarOpen && !isMobileMenuOpen) && "justify-center"
-                )}
-              >
-                <LogOut className="w-5 h-5" />
-                {(isSidebarOpen || isMobileMenuOpen) && <span className="text-sm">Keluar Akun</span>}
-              </button>
+              <div className="space-y-1">
+                <button 
+                  onClick={() => handleLogin(true)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-xl w-full text-indigo-600 hover:bg-indigo-50 transition-all font-medium",
+                    (!isSidebarOpen && !isMobileMenuOpen) && "justify-center"
+                  )}
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  {(isSidebarOpen || isMobileMenuOpen) && <span className="text-sm">Ganti Akun</span>}
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-xl w-full text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all font-medium",
+                    (!isSidebarOpen && !isMobileMenuOpen) && "justify-center"
+                  )}
+                >
+                  <LogOut className="w-5 h-5" />
+                  {(isSidebarOpen || isMobileMenuOpen) && <span className="text-sm">Keluar Akun</span>}
+                </button>
+              </div>
             ) : (
               <button 
                 onClick={handleLogin}
@@ -280,8 +296,21 @@ export const Layout = ({ children, activeView, setActiveView }: {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors lg:hidden">
-              <LogOut className="w-5 h-5" onClick={handleLogout} />
+            {user && (
+              <button 
+                onClick={() => handleLogin(true)}
+                className="p-2 text-slate-400 hover:text-indigo-600 transition-colors lg:hidden"
+                title="Ganti Akun"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-rose-600 transition-colors lg:hidden"
+              title="Keluar"
+            >
+              <LogOut className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2 pl-3 border-l border-slate-200 ml-1">
               {user ? (

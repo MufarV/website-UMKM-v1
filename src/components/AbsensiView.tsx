@@ -19,15 +19,14 @@ export const AbsensiView = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [newEntry, setNewEntry] = useState({
     name: '',
     tanggal: new Date().toISOString().split('T')[0],
     waktu: '',
     status: 'Hadir',
     noted: '',
-    lokasi_manual: '',
-    location: null as { lat: number; lng: number } | null
+    lokasi_manual: ''
   });
 
   useEffect(() => {
@@ -50,50 +49,38 @@ export const AbsensiView = () => {
   }, []);
 
   const handleAdd = async () => {
-    if (!newEntry.name || !newEntry.tanggal) return;
-    
-    setIsLocating(true);
-    let location = null;
-    
     try {
-      if ("geolocation" in navigator) {
-        // Handle potential permission denial or timeout
-        location = await new Promise<any>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            (err) => {
-               console.warn("GPS Access Denied/Error:", err);
-               resolve(null); // Resolve with null so we can still save
-            },
-            { enableHighAccuracy: true, timeout: 6000 }
-          );
-        });
+      setErrorMsg(null);
+      if (!newEntry.name) {
+        setErrorMsg("Mohon pilih karyawan terlebih dahulu.");
+        return;
       }
-    } catch (error) {
-      console.error("Geolocation Error:", error);
-    } finally {
-      setIsLocating(false);
+      if (!newEntry.tanggal) {
+        setErrorMsg("Mohon isi tanggal absensi.");
+        return;
+      }
+      
+      const actualTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      
+      await firebaseService.create('absensi', { 
+        ...newEntry, 
+        waktu: actualTime,
+        ownerId: auth.currentUser?.uid 
+      });
+      
+      setNewEntry({
+        name: '',
+        tanggal: new Date().toISOString().split('T')[0],
+        waktu: '',
+        status: 'Hadir',
+        noted: '',
+        lokasi_manual: ''
+      });
+      setShowAdd(false);
+    } catch (err) {
+      console.error("Error saving log:", err);
+      setErrorMsg("Terjadi kesalahan saat menyimpan log.");
     }
-
-    const actualTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    
-    await firebaseService.create('absensi', { 
-      ...newEntry, 
-      waktu: actualTime,
-      location,
-      ownerId: auth.currentUser?.uid 
-    });
-    
-    setNewEntry({
-      name: '',
-      tanggal: new Date().toISOString().split('T')[0],
-      waktu: '',
-      status: 'Hadir',
-      noted: '',
-      lokasi_manual: '',
-      location: null
-    });
-    setShowAdd(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -200,12 +187,18 @@ export const AbsensiView = () => {
                 <Clock className="w-3 h-3" />
                 <span>Waktu Catat: {newEntry.waktu} (Auto)</span>
               </div>
+              
+              {errorMsg && (
+                <div className="p-3 bg-rose-50 text-rose-600 text-sm font-bold rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" /> {errorMsg}
+                </div>
+              )}
+
               <button 
-                disabled={isLocating}
                 onClick={handleAdd}
-                className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-2"
               >
-                {isLocating ? 'Mengambil Lokasi...' : 'Simpan Log'}
+                Simpan Log
               </button>
             </div>
           </motion.div>
@@ -213,7 +206,75 @@ export const AbsensiView = () => {
       </AnimatePresence>
 
       <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="block md:hidden divide-y divide-slate-100 p-4">
+          {absensi.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <CalendarCheck className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p className="font-bold">Belum ada log absensi</p>
+            </div>
+          ) : (
+            absensi.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime()).map((rec) => (
+              <div key={rec.id} className="py-6 space-y-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-bold text-slate-900">{new Date(rec.tanggal).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-1">
+                      <Clock className="w-2.5 h-2.5" /> {rec.waktu || '--:--'}
+                    </div>
+                  </div>
+                  <span className={cn(
+                    "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                    rec.status === 'Hadir' && "bg-emerald-100 text-emerald-700",
+                    rec.status === 'Telat' && "bg-orange-100 text-orange-700",
+                    rec.status === 'Izin' && "bg-blue-100 text-blue-700",
+                    rec.status === 'Sakit' && "bg-amber-100 text-amber-700",
+                    rec.status === 'Alpa' && "bg-rose-100 text-rose-700"
+                  )}>
+                    {rec.status}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-black text-slate-800 text-sm">{rec.name || 'NN'}</div>
+                  {rec.noted && <div className="text-xs text-slate-500 leading-relaxed font-medium">{rec.noted}</div>}
+                </div>
+                <div className="flex items-center justify-between">
+                  {rec.location || rec.lokasi_manual ? (
+                    <div className="flex items-center gap-2">
+                      {rec.lokasi_manual && (
+                        <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                          {rec.lokasi_manual}
+                        </span>
+                      )}
+                      {rec.location && (
+                        <a 
+                          href={`https://www.google.com/maps?q=${rec.location.lat},${rec.location.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold"
+                        >
+                          <MapPin className="w-2.5 h-2.5" /> Maps
+                        </a>
+                      )}
+                    </div>
+                  ) : <div />}
+                  <button 
+                    onClick={() => handleDelete(rec.id)}
+                    className={cn(
+                      "p-2 rounded-xl transition-all",
+                      confirmDeleteId === rec.id ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
+                    )}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50/50 text-xs text-slate-400 uppercase tracking-widest font-black">
               <tr>

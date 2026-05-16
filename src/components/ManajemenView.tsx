@@ -244,12 +244,14 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (confirm('Hapus proyek ini beserta tugas terkaitnya?')) {
+    try {
       await firebaseService.delete('projects', id);
       const newSchedules = (data.schedules || []).filter((s: any) => s.projectId !== id);
       const newData = { ...data, schedules: newSchedules };
       setData(newData);
       onUpdate({ ...newData, updatedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -319,14 +321,14 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
         </div>
 
         {/* SWORDS -> SWOT Analysis */}
-        <div className="bg-slate-900/90 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-slate-700/50 shadow-2xl space-y-6 relative overflow-hidden">
+        <div className="bg-slate-900/90 backdrop-blur-3xl p-6 md:p-8 rounded-[2.5rem] border border-slate-700/50 shadow-2xl space-y-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none -mr-48 -mt-48 mix-blend-screen"></div>
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-rose-500/10 rounded-full blur-[80px] pointer-events-none -ml-32 -mb-32 mix-blend-screen"></div>
           
           <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2 relative z-10">
             <Shield className="w-4 h-4 text-indigo-400" /> SWOT Analysis
           </h3>
-          <div className="grid grid-cols-2 gap-4 relative z-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
             {(['s', 'w', 'o', 't'] as const).map(key => (
               <div key={key} className={cn(
                 "p-4 rounded-3xl border space-y-3",
@@ -344,11 +346,11 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
                     <Plus className="w-3 h-3 text-white" />
                   </button>
                 </div>
-                <div className="space-y-2 max-h-[100px] overflow-y-auto custom-scrollbar">
+                <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar">
                   {data.swot[key].map((item: string, idx: number) => (
                     <div key={idx} className="relative group">
                       <input 
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[9px] text-white font-bold outline-none focus:border-white/30"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white font-bold outline-none focus:border-white/30"
                         value={item}
                         onChange={e => updateSwotItem(key, idx, e.target.value)}
                       />
@@ -360,6 +362,9 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
                       </button>
                     </div>
                   ))}
+                  {data.swot[key].length === 0 && (
+                    <p className="text-[9px] text-slate-500 font-bold italic px-2">Belum ada item...</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -367,11 +372,11 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
         </div>
 
         {/* Isu Strategis (Eisenhower Matrix) */}
-        <div className="bg-white/80 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden space-y-6">
+        <div className="bg-white/80 backdrop-blur-2xl p-6 md:p-8 rounded-[2.5rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden space-y-6">
           <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-rose-500" /> Hasil SWOT (Isu Strategis) - Eisenhower Matrix
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {(['iu', 'inu', 'niu', 'ninu'] as const).map(key => (
               <div key={key} className={cn(
                 "p-4 rounded-3xl border space-y-3",
@@ -387,10 +392,10 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
                     key === 'niu' ? "text-indigo-700" :
                     "text-slate-600"
                   )}>
-                    {key === 'iu' ? 'Penting & Mendesak (Do First)' : 
-                     key === 'inu' ? 'Penting & Tidak Mendesak (Schedule)' : 
-                     key === 'niu' ? 'Tidak Penting & Mendesak (Delegate)' : 
-                     'Tidak Penting & Tidak Mendesak (Eliminate)'}
+                    {key === 'iu' ? 'Penting & Mendesak' : 
+                     key === 'inu' ? 'Penting & Tidak Mendesak' : 
+                     key === 'niu' ? 'Tidak Penting & Mendesak' : 
+                     'Tidak Penting & Tidak Mendesak'}
                   </span>
                   <button 
                     onClick={() => addStrategicIssueItem(key)}
@@ -399,7 +404,7 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
-                <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+                <div className="space-y-2 max-h-[140px] overflow-y-auto custom-scrollbar">
                   {(data.strategicIssues?.[key] || []).map((item: string, idx: number) => (
                     <div key={idx} className="relative group flex items-center">
                       <input 
@@ -672,12 +677,6 @@ const PlanningView = ({ planning, projects, onUpdate }: { planning: any, project
             <Calendar className="w-4 h-4 text-indigo-600" /> Penjadwalan & Eksekusi Target (Schedules)
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <button 
-              onClick={() => setShowAddProject(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight hover:bg-slate-800 transition-all border border-slate-800"
-            >
-              <Briefcase className="w-3 h-3" /> + Proyek
-            </button>
             <button onClick={addSchedule} className="flex items-center justify-center p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100">
               <Plus className="w-4 h-4" />
             </button>

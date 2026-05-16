@@ -66,6 +66,22 @@ service cloud.firestore {
              data.name is string && data.name.size() <= 100;
     }
 
+    function isValidMarketingJourney(data) {
+      return data.keys().hasAll(['ownerId']) &&
+             data.ownerId == request.auth.uid;
+    }
+
+    function isValidMarketingCalendar(data) {
+      return data.keys().hasAll(['ownerId', 'date', 'note']) &&
+             data.ownerId == request.auth.uid &&
+             data.date is string && data.note is string;
+    }
+
+    function isValidMarketingStp(data) {
+      return data.keys().hasAll(['ownerId', 'segmentasi', 'targeting', 'positioning']) &&
+             data.ownerId == request.auth.uid;
+    }
+
     // 3. Match Blocks
     match /transactions/{transactionId} {
       allow get: if isOwner(existing());
@@ -214,18 +230,26 @@ service cloud.firestore {
     }
 
     match /marketing_journey/{journeyId} {
-      allow get: if isOwner(existing());
+      allow get: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if isSignedIn();
-      allow update: if isOwner(existing());
+      allow create: if isSignedIn() && isValidMarketingJourney(incoming());
+      allow update: if isOwner(existing()) && isValidMarketingJourney(incoming());
       allow delete: if isOwner(existing());
     }
 
     match /marketing_calendar/{noteId} {
-      allow get: if isOwner(existing());
+      allow get: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if isSignedIn();
-      allow update: if isOwner(existing());
+      allow create: if isSignedIn() && isValidMarketingCalendar(incoming());
+      allow update: if isOwner(existing()) && isValidMarketingCalendar(incoming());
+      allow delete: if isOwner(existing());
+    }
+
+    match /marketing_stp/{stpId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidMarketingStp(incoming());
+      allow update: if isOwner(existing()) && isValidMarketingStp(incoming());
       allow delete: if isOwner(existing());
     }
   }
