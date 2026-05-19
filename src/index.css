@@ -19,6 +19,22 @@ body {
 }
 
 /* Custom transitions and glassmorphism */
+html.dark {
+  filter: invert(1) hue-rotate(180deg);
+  background-color: #111; /* Provides a base dark tone when inverted */
+}
+
+html.dark img,
+html.dark video,
+html.dark [style*="background-image"],
+html.dark .recharts-surface {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html {
+  transition: filter 0.3s ease;
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);

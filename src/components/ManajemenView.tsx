@@ -33,7 +33,8 @@ import {
   Activity,
   UserCheck,
   ClipboardList,
-  CheckSquare
+  CheckSquare,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -1056,12 +1057,27 @@ const TimelineView = ({ tasks, projects, employees }: { tasks: any[], projects: 
 const OrganizingView = ({ divisions, employees, planning, onUpdatePlanning }: { divisions: any[], employees: any[], planning: any, onUpdatePlanning: (data: any) => void }) => {
   const [showAddDivision, setShowAddDivision] = useState(false);
   const [newDivision, setNewDivision] = useState({ name: '', description: '', employeeIds: [] });
+  const [managingDivisionId, setManagingDivisionId] = useState<string | null>(null);
 
   const handleAddDivision = () => {
     if (!newDivision.name) return;
     firebaseService.create('divisions', { ...newDivision, ownerId: auth.currentUser?.uid });
     setNewDivision({ name: '', description: '', employeeIds: [] });
     setShowAddDivision(false);
+  };
+
+  const toggleEmployeeInDivision = async (divId: string, empId: string) => {
+    const div = divisions.find(d => d.id === divId);
+    if (!div) return;
+    
+    let updatedIds = div.employeeIds || [];
+    if (updatedIds.includes(empId)) {
+        updatedIds = updatedIds.filter((id: string) => id !== empId);
+    } else {
+        updatedIds = [...updatedIds, empId];
+    }
+    
+    await firebaseService.update('divisions', divId, { employeeIds: updatedIds });
   };
 
   return (
@@ -1130,13 +1146,55 @@ const OrganizingView = ({ divisions, employees, planning, onUpdatePlanning }: { 
                       {e.name}
                     </div>
                   ))}
-                  <button className="px-2 py-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg text-[9px] font-black">+ Anggota</button>
+                  <button onClick={() => setManagingDivisionId(div.id)} className="px-2 py-1 bg-indigo-50 text-indigo-600 outline-none border border-indigo-100 rounded-lg text-[9px] font-black hover:bg-indigo-100 transition-colors">Kelola Anggota</button>
                 </div>
               </div>
             </div>
           ))}
         </div>
       </section>
+
+      <AnimatePresence>
+        {managingDivisionId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" onClick={() => setManagingDivisionId(null)}>
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg">Kelola SDM</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pilih anggota untuk divisi ini</p>
+                </div>
+                <button onClick={() => setManagingDivisionId(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-colors outline-none"><X className="w-5 h-5"/></button>
+              </div>
+              <div className="p-6 overflow-y-auto space-y-3">
+                {employees.map(emp => {
+                  const div = divisions.find(d => d.id === managingDivisionId);
+                  const isMember = div?.employeeIds?.includes(emp.id);
+                  return (
+                    <div key={emp.id} className="flex items-center justify-between p-3 rounded-2xl border border-slate-100 hover:border-slate-300 transition-all cursor-pointer" onClick={() => toggleEmployeeInDivision(managingDivisionId, emp.id)}>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-800">{emp.name}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{emp.role}</span>
+                      </div>
+                      <div className={cn("px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors", isMember ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600")}>
+                        {isMember ? "Hapus" : "Tambah"}
+                      </div>
+                    </div>
+                  );
+                })}
+                {employees.length === 0 && (
+                  <p className="text-center text-xs font-bold text-slate-400 py-8">Belum ada SDM terdaftar.</p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <section className="space-y-6 pt-12 border-t border-slate-100">
         <div className="flex items-center gap-3">

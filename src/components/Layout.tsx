@@ -17,7 +17,9 @@ import {
   Bell,
   Search,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -66,8 +68,37 @@ export const Layout = ({ children, activeView, setActiveView }: {
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
   const [user, setUser] = useState<User | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [businessLogo, setBusinessLogo] = useState<string | null>(() => localStorage.getItem('businessLogo') || null);
+  const [businessNameMain, setBusinessNameMain] = useState(() => localStorage.getItem('businessNameMain') || 'UMKM');
+  const [businessNameSub, setBusinessNameSub] = useState(() => localStorage.getItem('businessNameSub') || 'Pro Student Hub');
+
+  React.useEffect(() => {
+    localStorage.setItem('businessNameMain', businessNameMain);
+  }, [businessNameMain]);
+
+  React.useEffect(() => {
+    localStorage.setItem('businessNameSub', businessNameSub);
+  }, [businessNameSub]);
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setBusinessLogo(result);
+        localStorage.setItem('businessLogo', result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Auto-collapse sidebar on smaller screens
   React.useEffect(() => {
@@ -110,6 +141,18 @@ export const Layout = ({ children, activeView, setActiveView }: {
 
   const handleLogout = async () => {
     await signOut(auth);
+  };
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(prev => {
+      const isDark = !prev;
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return isDark;
+    });
   };
 
   const menuGroups = [
@@ -169,15 +212,46 @@ export const Layout = ({ children, activeView, setActiveView }: {
           <div className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl ring-4 ring-indigo-50">U</div>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  onChange={handleLogoUpload} 
+                />
+                <div 
+                  className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl ring-4 ring-indigo-50 shrink-0 cursor-pointer overflow-hidden hover:opacity-80 transition-opacity",
+                    !businessLogo && "bg-indigo-600 text-white"
+                  )}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Klik untuk mengubah logo"
+                >
+                  {businessLogo ? (
+                    <img src={businessLogo} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    businessNameMain.charAt(0).toUpperCase() || 'U'
+                  )}
+                </div>
                 {(isSidebarOpen || isMobileMenuOpen) && (
-                  <motion.h1 
+                  <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="text-xl font-extrabold tracking-tight text-indigo-900 leading-none"
+                    className="flex flex-col flex-1 min-w-0"
                   >
-                    UMKM<span className="block text-xs font-medium text-slate-400">Pro Student Hub</span>
-                  </motion.h1>
+                    <input 
+                      value={businessNameMain}
+                      onChange={(e) => setBusinessNameMain(e.target.value)}
+                      className="text-xl font-extrabold tracking-tight text-indigo-900 leading-none bg-transparent outline-none w-full placeholder-indigo-300"
+                      placeholder="Nama Utama"
+                    />
+                    <input 
+                      value={businessNameSub}
+                      onChange={(e) => setBusinessNameSub(e.target.value)}
+                      className="text-xs font-medium text-slate-400 bg-transparent outline-none w-full placeholder-slate-300"
+                      placeholder="Sub Judul"
+                    />
+                  </motion.div>
                 )}
               </div>
               <button 
@@ -215,13 +289,6 @@ export const Layout = ({ children, activeView, setActiveView }: {
           </nav>
 
           <div className="p-4 border-t border-slate-100 mt-auto">
-            {(isSidebarOpen || isMobileMenuOpen) && (
-              <div className="bg-gradient-to-br from-indigo-900 to-indigo-800 rounded-xl p-4 text-white relative overflow-hidden mb-4 shadow-lg shadow-indigo-100">
-                <p className="text-[10px] font-bold uppercase tracking-wider opacity-70 mb-1">Status Akun</p>
-                <p className="text-sm font-bold">Premium Student</p>
-                <Sparkles className="absolute top-2 right-2 w-4 h-4 text-white/20" />
-              </div>
-            )}
             {user ? (
               <div className="space-y-1">
                 <button 
@@ -296,6 +363,13 @@ export const Layout = ({ children, activeView, setActiveView }: {
           </div>
 
           <div className="flex items-center gap-3">
+            <button 
+              onClick={toggleDarkMode}
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-colors"
+              title="Toggle Dark Mode"
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             {user && (
               <button 
                 onClick={() => handleLogin(true)}

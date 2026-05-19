@@ -546,7 +546,7 @@ const TrialBalanceList = ({ accounts, entries }: { accounts: any[], entries: any
   });
 
   const handleExportExcel = () => {
-    const data = [['Murni Cipta - Neraca Saldo'], ['Nama Akun', 'Debit (Rp)', 'Kredit (Rp)']];
+    const data: any[][] = [['Murni Cipta - Neraca Saldo'], ['Nama Akun', 'Debit (Rp)', 'Kredit (Rp)']];
     
     let sumDebit = 0;
     let sumCredit = 0;
@@ -1195,11 +1195,20 @@ export const KeuanganView = () => {
               <option value="expense">Pengeluaran</option>
             </select>
             <input 
+              list="kategori-list"
               placeholder="Kategori" 
               className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none"
               value={transactionForm.category}
               onChange={e => setTransactionForm({...transactionForm, category: e.target.value})}
             />
+            <datalist id="kategori-list">
+              {Array.from(new Set([
+                'Operasional', 'Bahan Baku', 'Sewa', 'Pemasaran', 'Gaji', 'Transportasi', 'Listrik & Air', 'Lainnya',
+                ...transactions.map((t: any) => t.category).filter(Boolean)
+              ])).map(cat => (
+                <option key={cat as string} value={cat as string} />
+              ))}
+            </datalist>
             <div className="flex gap-2">
               <button 
                 onClick={handleSaveTransaction}

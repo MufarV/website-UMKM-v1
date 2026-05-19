@@ -28,7 +28,7 @@ export default function App() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setActiveView} />;
       case 'manajemen':
         return <ManajemenView />;
       case 'hrd':
@@ -50,7 +50,7 @@ export default function App() {
       case 'analisis':
         return <AnalisisView />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setActiveView} />;
     }
   };
 

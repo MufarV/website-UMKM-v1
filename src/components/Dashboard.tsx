@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -6,9 +6,11 @@ import {
   Package, 
   Megaphone, 
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  BrainCircuit,
+  MessageSquareShare
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   AreaChart, 
   Area, 
@@ -25,23 +27,17 @@ import {
 import { auth } from '../lib/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
-const data = [
-  { name: 'Senin', sales: 4000, reach: 2400 },
-  { name: 'Selasa', sales: 3000, reach: 1398 },
-  { name: 'Rabu', sales: 2000, reach: 9800 },
-  { name: 'Kamis', sales: 2780, reach: 3908 },
-  { name: 'Jumat', sales: 1890, reach: 4800 },
-  { name: 'Sabtu', sales: 2390, reach: 3800 },
-  { name: 'Minggu', sales: 3490, reach: 4300 },
-];
-
 const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316'];
 
 import { firebaseService } from '../services/firebaseService';
 
-export const Dashboard = () => {
+export const Dashboard = ({ onNavigate }: { onNavigate?: (view: string) => void }) => {
   const [user, setUser] = React.useState(auth.currentUser);
   const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  
+  // States
+  const [isAiOn, setIsAiOn] = useState(true);
+  const [chartPeriod, setChartPeriod] = useState<number>(7);
   
   // Real Data State
   const [transactions, setTransactions] = React.useState<any[]>([]);
@@ -78,7 +74,6 @@ export const Dashboard = () => {
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     
-  // Also include completed orders from website
   const orderRevenue = pesanan
     .filter(p => p.status === 'Selesai')
     .reduce((sum, p) => sum + (Number(p.totalHarga || p.total || 0)), 0);
@@ -90,65 +85,67 @@ export const Dashboard = () => {
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     
   const lowStockCount = inventory.filter(i => (Number(i.stock) || 0) < (Number(i.minStock) || 10)).length;
+  const outOfStockCount = inventory.filter(i => (Number(i.stock) || 0) === 0).length;
+  
   const activeTasks = tasks.filter(t => t.status !== 'Done').length;
   const completionRate = tasks.length > 0 
     ? Math.round((tasks.filter(t => t.status === 'Done').length / tasks.length) * 100) 
     : 0;
 
   // Dynamic Chart Data
-  const getWeeklyData = () => {
-    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const getChartData = (daysCount: number) => {
+    const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     const now = new Date();
     const result = [];
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = daysCount - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(now.getDate() - i);
       const dayName = days[d.getDay()];
       const dateStr = d.toLocaleDateString('id-ID');
-
-      // Revenue for this day
-      const dailyTrans = transactions
-        .filter(t => {
-          const tDate = t.date || (t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('id-ID') : '');
-          return t.type === 'income' && tDate === dateStr;
-        })
-        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
         
       const dailyOrders = pesanan
         .filter(p => {
           const pDate = p.tanggal_po || (p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('id-ID') : '');
-          return p.status === 'Selesai' && pDate === dateStr;
-        })
-        .reduce((sum, p) => sum + (Number(p.totalHarga || p.total || 0)), 0);
+          return pDate === dateStr;
+        }).length;
 
-      const reachData = 1000 + Math.floor(Math.random() * 5000); // Placeholder reach
+      const reachData = 1000 + Math.floor(Math.random() * 5000); 
 
       result.push({
-        name: dayName,
-        sales: dailyTrans + dailyOrders,
+        name: daysCount <= 7 ? dayName : `${d.getDate()}/${d.getMonth()+1}`,
+        sales: dailyOrders,
         reach: reachData,
         date: dateStr
       });
     }
 
-    // If no real data yet, use some mock but realistic data for placeholder
     if (result.every(r => r.sales === 0)) {
-        return [
-            { name: 'Senin', sales: 4000, reach: 2400 },
-            { name: 'Selasa', sales: 3000, reach: 1398 },
-            { name: 'Rabu', sales: 2000, reach: 9800 },
-            { name: 'Kamis', sales: 2780, reach: 3908 },
-            { name: 'Jumat', sales: 1890, reach: 4800 },
-            { name: 'Sabtu', sales: 2390, reach: 3800 },
-            { name: 'Minggu', sales: 3490, reach: 4300 },
-        ];
+        if (daysCount <= 7) {
+            return [
+                { name: 'Sen', sales: 4, reach: 2400 },
+                { name: 'Sel', sales: 3, reach: 1398 },
+                { name: 'Rab', sales: 2, reach: 9800 },
+                { name: 'Kam', sales: 5, reach: 3908 },
+                { name: 'Jum', sales: 1, reach: 4800 },
+                { name: 'Sab', sales: 2, reach: 3800 },
+                { name: 'Min', sales: 3, reach: 4300 },
+            ];
+        } else {
+             // Mock 30 days
+             return Array.from({length: 30}).map((_, i) => ({
+                 name: `${i+1}/5`,
+                 sales: Math.floor(Math.random() * 6),
+                 reach: 1000,
+                 date: 'mock'
+             }));
+        }
     }
 
     return result;
   };
 
-  const chartData = getWeeklyData();
+  const chartData = getChartData(chartPeriod);
 
   const handleLogin = async () => {
     if (isLoggingIn) return;
@@ -163,7 +160,7 @@ export const Dashboard = () => {
       setIsLoggingIn(false);
     }
   };
-
+  
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
@@ -208,14 +205,125 @@ export const Dashboard = () => {
           <p className="text-sm text-slate-500 font-medium">Inilah ringkasan bisnis Anda hari ini.</p>
         </div>
         <div className="flex w-full md:w-auto gap-2">
-          <button className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors shadow-sm">
-            Eksport
-          </button>
-          <button className="flex-2 md:flex-none px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4" /> SMART INSIGHT
+          <button 
+            onClick={() => setIsAiOn(!isAiOn)}
+            className={cn(
+              "flex-2 md:flex-none px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2",
+              isAiOn 
+                ? "bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-200 hover:bg-fuchsia-700 ring-2 ring-fuchsia-300 ring-offset-1" 
+                : "bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700"
+            )}
+          >
+            {isAiOn ? <BrainCircuit className="w-4 h-4 animate-pulse" /> : <Sparkles className="w-4 h-4" />} 
+            {isAiOn ? "AI AKTIF" : "SMART INSIGHT"}
           </button>
         </div>
       </div>
+
+      {/* AI Insight Full Dropdown (Visible if AI is ON) */}
+      <AnimatePresence>
+        {isAiOn && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, scale: 0.95 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+            className="bg-indigo-900 overflow-hidden p-6 md:p-8 rounded-[2rem] text-white flex flex-col shadow-2xl relative overflow-hidden backdrop-blur-xl"
+          >
+            <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-fuchsia-500/30 rounded-full blur-[80px] pointer-events-none mix-blend-screen"></div>
+            <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-500/20 rounded-full blur-[60px] pointer-events-none mix-blend-screen"></div>
+            
+            <div className="flex items-center justify-between mb-6 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-fuchsia-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-fuchsia-400/30">
+                  <BrainCircuit className="w-5 h-5 text-fuchsia-300 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-fuchsia-50 text-base">Analisa AI Menyeluruh</h4>
+                  <p className="text-[10px] text-indigo-200">Diperbarui beberapa detik lalu</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+              <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="w-4 h-4 text-amber-300" />
+                  <p className="text-[10px] font-bold uppercase opacity-80 tracking-wider">Divisi Produksi</p>
+                </div>
+                <p className="text-xs leading-relaxed font-medium text-indigo-50">
+                  {outOfStockCount > 0 
+                    ? `KRITIS! ${outOfStockCount} bahan baku habis. Segera lakukan pre-order ke supplier agar lini produksi tidak berhenti.`
+                    : lowStockCount > 3 
+                      ? `${lowStockCount} bahan baku menipis. Rekomendasi: lakukan restock massal hari ini untuk diskon grosir.`
+                      : "Stok bahan baku terkendali. Tidak ada peringatan mendesak untuk bagian gudang."}
+                </p>
+              </div>
+
+              <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-300" />
+                  <p className="text-[10px] font-bold uppercase opacity-80 tracking-wider">Divisi Keuangan</p>
+                </div>
+                <p className="text-xs leading-relaxed font-medium text-indigo-50">
+                  {totalRevenue > totalExpenses 
+                    ? `Performa sangat baik! Margin keuntungan positif. Rekomendasi: sisihkan 20% laba bulan ini untuk dana darurat ekspansi.`
+                    : totalExpenses > 0 && totalRevenue === 0
+                      ? 'Biaya operasional berjalan tapi penjualan belum masuk. Fokuskan tim untuk segera mengekseskusi promosi pembukaan.'
+                      : 'Arus kas terpantau stabil. Pastikan menagih hutang / piutang yang jatuh tempo minggu ini.'}
+                </p>
+              </div>
+
+              <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="w-4 h-4 text-blue-300" />
+                  <p className="text-[10px] font-bold uppercase opacity-80 tracking-wider">Divisi HRD</p>
+                </div>
+                <p className="text-xs leading-relaxed font-medium text-indigo-50">
+                  {activeTasks > 5 
+                    ? `Karyawan menangani ${activeTasks} tugas tertunda. Pertimbangkan rekrut staf paruh waktu untuk mengurangi beban.`
+                    : employees.length === 0
+                      ? 'Tim belum dibentuk. Rekomendasi: mulai rekrut admin dan asisten produksi agar pengelolaan tidak terpusat di Anda.'
+                      : 'Distribusi tugas terpantau seimbang dengan tim yang ada. Ingatkan staf untuk terus perbarui status operasional harian.'}
+                </p>
+              </div>
+
+              <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Megaphone className="w-4 h-4 text-fuchsia-300" />
+                  <p className="text-[10px] font-bold uppercase opacity-80 tracking-wider">Divisi Pemasaran</p>
+                </div>
+                <p className="text-xs leading-relaxed font-medium text-indigo-50">
+                  {pesanan.filter(p => p.status === 'Baru').length > 0
+                    ? `Ledakan minat! ${pesanan.filter(p => p.status === 'Baru').length} pesanan digital baru menunggu. Respon cepat akan menaikkan rating kepuasan pelanggan.`
+                    : pesanan.length > 10
+                      ? `Tingkat retensi pelanggan online Anda bagus. Rekomendasi: buat program loyalty "Beli 5 Gratis 1" pada halaman pemesanan.`
+                      : 'Volume pesanan digital masih rendah. Pertimbangkan penambahan diskon promo "Ongkir Gratis" di media sosial.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Kesimpulan Bisnis AI */}
+            <div className="mt-6 pt-6 border-t border-white/10 relative z-10">
+              <div className="flex items-start gap-4 bg-white/5 p-4 rounded-2xl border border-white/5">
+                <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-indigo-300" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-1">Kesimpulan Strategis Bisnis</h5>
+                  <p className="text-xs text-indigo-50/80 leading-relaxed font-medium">
+                    {totalRevenue > 500000 
+                      ? "Bisnis Anda menunjukkan traksi positif yang kuat. " 
+                      : "Bisnis dalam tahap awal pertumbuhan. "}
+                    {lowStockCount > 3 ? "Prioritas utama hari ini adalah pengamanan stok bahan baku. " : ""}
+                    {activeTasks > 5 ? "Segera delegasikan tugas yang menumpuk agar operasional tetap gesit. " : ""}
+                    Optimalkan kanal Digital untuk terus meningkatkan volume pesanan harian.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -259,9 +367,13 @@ export const Dashboard = () => {
               <h4 className="font-bold text-slate-800 text-sm md:text-base">Grafik Performa</h4>
               <p className="text-[10px] text-slate-400">Analisis mingguan terintegrasi</p>
             </div>
-            <select className="text-[10px] font-bold border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 outline-none w-full sm:w-auto">
-              <option>7 Hari Terakhir</option>
-              <option>30 Hari Terakhir</option>
+            <select 
+              value={chartPeriod}
+              onChange={(e) => setChartPeriod(Number(e.target.value))}
+              className="text-[10px] font-bold border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 outline-none w-full sm:w-auto"
+            >
+              <option value={7}>7 Hari Terakhir</option>
+              <option value={30}>30 Hari Terakhir</option>
             </select>
           </div>
           <div className="h-[220px] md:h-[300px] w-full">
@@ -310,72 +422,67 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* Reporting & Decisions */}
-        <div className="lg:col-span-4 bg-indigo-900 p-6 md:p-8 rounded-[2rem] text-white flex flex-col shadow-2xl relative overflow-hidden backdrop-blur-xl">
-          <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-fuchsia-500/30 rounded-full blur-[80px] pointer-events-none mix-blend-screen"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-500/20 rounded-full blur-[60px] pointer-events-none mix-blend-screen"></div>
-          
-          <div className="flex items-center gap-3 mb-6 relative z-10">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <h4 className="font-bold">Bisnis AI Insight</h4>
-          </div>
-          
-          <div className="space-y-3 flex-1">
-            {[
-              { label: 'PRODUKSI', text: lowStockCount > 0 ? `Stok menipis pada ${lowStockCount} item. Segera belanja bahan!` : 'Stok bahan baku terpantau aman untuk 1 minggu.' },
-              { label: 'MARKETING', text: pesanan.filter(p => p.status === 'Baru').length > 0 ? `Ada ${pesanan.filter(p => p.status === 'Baru').length} pesanan baru dari web. Segera proses!` : 'Belum ada pesanan baru masuk hari ini.' },
-              { label: 'KEUANGAN', text: totalRevenue > totalExpenses ? 'Arus kas surplus. Pertimbangkan alokasi dana cadangan.' : 'Pengeluaran cukup tinggi. Cek detail biaya operasional.' }
-            ].map((item, idx) => (
-              <div key={idx} className="bg-white/10 p-3.5 rounded-2xl border border-white/10 active:scale-[0.98] transition-transform">
-                <p className="text-[9px] font-bold uppercase opacity-60 mb-1 tracking-wider">{item.label}</p>
-                <p className="text-[11px] leading-relaxed font-medium">{item.text}</p>
+        {/* Divisi Produksi & Operasional Status */}
+        <div className="lg:col-span-4 bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="font-bold text-sm md:text-base">Produksi & Operasional</h3>
+                <Package className="w-5 h-5 text-indigo-400" />
               </div>
-            ))}
-          </div>
-          
-          <button className="mt-6 w-full py-3.5 bg-white text-indigo-900 rounded-2xl font-bold text-xs hover:bg-indigo-50 transition-all flex items-center justify-center gap-2">
-            Laporan Lengkap (.pdf) <ArrowRight className="w-4 h-4" />
-          </button>
+              
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Status Persediaan</p>
+                   <div className="flex items-center gap-3">
+                     <div className="flex-1">
+                        <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                           <span>Total Bahan/Barang</span>
+                           <span>{inventory.length}</span>
+                        </div>
+                        <div className="flex justify-between text-xs font-bold text-rose-600">
+                           <span>Perlu Restock</span>
+                           <span>{lowStockCount}</span>
+                        </div>
+                     </div>
+                   </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Status Tugas (Daily)</p>
+                   <div className="flex items-center gap-3">
+                     <div className="flex-1">
+                        <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                           <span>Total Pekerjaan</span>
+                           <span>{tasks.length}</span>
+                        </div>
+                        <div className="flex justify-between text-xs font-bold text-amber-600">
+                           <span>Sedang Berjalan</span>
+                           <span>{activeTasks}</span>
+                        </div>
+                     </div>
+                   </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-[10px] leading-relaxed text-slate-500 font-medium">
+                Sistem memberikan peringatan jika stok mencapai batas minimum atau ada operasional mandek.
+              </p>
+            </div>
         </div>
       </div>
 
-      {/* Bottom Grid */}
+      {/* Bottom Grid for other Divisions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-        {/* Quick Management */}
+        
+        {/* Divisi Keuangan */}
         <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-5">
-            <h3 className="font-bold text-sm md:text-base">Manajemen Tim</h3>
-            <span className="text-[10px] text-indigo-600 font-bold cursor-pointer hover:underline">Semua</span>
+             <h3 className="font-bold text-sm md:text-base">Divisi Keuangan</h3>
+             <button onClick={() => onNavigate?.('keuangan')} className="text-[10px] text-indigo-600 font-bold cursor-pointer hover:underline outline-none">Detail</button>
           </div>
-          <div className="space-y-3">
-            {employees.length > 0 ? employees.slice(0, 3).map((emp, i) => (
-              <div key={i} className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-2xl transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 border border-slate-200 text-xs text-uppercase">
-                    {emp.name?.split(' ').map((n: string)=>n[0]).join('') || 'E'}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold">{emp.name}</p>
-                    <p className="text-[10px] text-slate-500 font-medium">{emp.position || emp.role || 'Staf'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-full">
-                  <div className="w-1 h-1 rounded-full bg-emerald-500"></div>
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Aktif</span>
-                </div>
-              </div>
-            )) : (
-              <p className="text-[10px] text-slate-400 text-center py-4 italic">Belum ada data tim. Tambahkan di menu HRD.</p>
-            )}
-          </div>
-        </div>
-
-        {/* Finance Pulse */}
-        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold mb-5 text-sm md:text-base">Kesehatan Dana</h3>
-          <div className="h-[160px] w-full mb-5">
+          <div className="h-[120px] w-full mb-5">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData.slice(-5)}>
                 <Bar dataKey="sales" radius={[6, 6, 0, 0]}>
@@ -388,53 +495,93 @@ export const Dashboard = () => {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
-              <p className="text-[9px] font-bold text-emerald-600 uppercase mb-1">Masuk</p>
-              <p className="text-sm md:text-base font-black text-emerald-700">{formatCurrency(totalRevenue)}</p>
+              <p className="text-[9px] font-bold text-emerald-600 uppercase mb-1">Kas Masuk</p>
+              <p className="text-sm md:text-base font-black text-emerald-700 truncate" title={formatCurrency(totalRevenue)}>{formatCurrency(totalRevenue)}</p>
             </div>
             <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl">
-              <p className="text-[9px] font-bold text-rose-600 uppercase mb-1">Keluar</p>
-              <p className="text-sm md:text-base font-black text-rose-700">{formatCurrency(totalExpenses)}</p>
+              <p className="text-[9px] font-bold text-rose-600 uppercase mb-1">Kas Keluar</p>
+              <p className="text-sm md:text-base font-black text-rose-700 truncate" title={formatCurrency(totalExpenses)}>{formatCurrency(totalExpenses)}</p>
             </div>
           </div>
         </div>
 
-        {/* Digital Presence */}
-        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold mb-5 text-sm md:text-base">Status Digital</h3>
-            <div className="space-y-4">
-              {[
-                { label: 'SEO Speed', value: 85, color: 'bg-indigo-600' },
-                { label: 'Social Reach', value: 62, color: 'bg-purple-600' }
-              ].map((item, idx) => (
-                <div key={idx} className="space-y-1.5">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-600 px-1">
-                    <span>{item.label}</span>
-                    <span className="text-slate-400">{item.value}%</span>
+        {/* Divisi HRD */}
+        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-5">
+            <h3 className="font-bold text-sm md:text-base">Divisi HRD (Tim)</h3>
+            <button onClick={() => onNavigate?.('hrd')} className="text-[10px] text-indigo-600 font-bold cursor-pointer hover:underline outline-none">Semua</button>
+          </div>
+          <div className="space-y-3">
+            {employees.length > 0 ? employees.slice(0, 4).map((emp, i) => (
+              <div key={i} className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-2xl transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 border border-slate-200 text-xs text-uppercase">
+                    {emp.name?.split(' ').map((n: string)=>n[0]).join('') || 'E'}
                   </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={cn("h-full transition-all duration-1000", item.color)} style={{ width: `${item.value}%` }}></div>
+                  <div>
+                    <p className="text-xs font-bold truncate max-w-[120px]" title={emp.name}>{emp.name}</p>
+                    <p className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">{emp.position || emp.role || 'Staf'}</p>
                   </div>
                 </div>
-              ))}
-              <div className="flex items-center justify-between px-1 pt-2">
-                <span className="text-[11px] font-bold text-slate-600">Total Pesanan Web</span>
-                <span className="text-[11px] font-black text-indigo-600">{pesanan.length} Order</span>
+                <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-md">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <span className="text-[8px] font-black text-emerald-700 uppercase tracking-widest">Aktif</span>
+                </div>
+              </div>
+            )) : (
+              <div className="flex flex-col items-center justify-center h-[200px] text-center border-2 border-dashed border-slate-100 rounded-2xl">
+                <Users className="w-8 h-8 text-slate-300 mb-2" />
+                <p className="text-[10px] text-slate-400 italic">Belum ada data tim.<br/>Tambahkan di menu HRD.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+
+        {/* Divisi Pemasaran & Digital */}
+        <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="font-bold text-sm md:text-base">Divisi Pemasaran Digital</h3>
+              <Megaphone className="w-4 h-4 text-indigo-400" />
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 border border-slate-100 rounded-xl">
+                 <div className="flex items-center gap-2">
+                    <MessageSquareShare className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-bold text-slate-700">Tingkat Reach Sosial</span>
+                 </div>
+                 <span className="text-xs font-black text-slate-900">Baik</span>
+              </div>
+              
+              <div className="space-y-1.5 mt-2">
+                <div className="flex justify-between items-center text-[11px] font-bold text-slate-600 px-1">
+                  <span>Konversi Pengunjung &rarr; Pesanan Web</span>
+                  <span className="text-emerald-500">{(pesanan.length > 0 ? Math.min(100, Math.round(pesanan.length * 3.4)) : 0)}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${(pesanan.length > 0 ? Math.min(100, Math.round(pesanan.length * 3.4)) : 0)}%` }}></div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                 <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-center">
+                    <p className="text-2xl font-black text-indigo-600">{pesanan.length}</p>
+                    <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-1">Total PO Web</p>
+                 </div>
+                 <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-center">
+                    <p className="text-2xl font-black text-amber-600">{pesanan.filter(p => p.status === 'Baru').length}</p>
+                    <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mt-1">PO Baru</p>
+                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-8 p-3.5 bg-indigo-50/50 border border-dashed border-indigo-200 rounded-2xl text-center">
-            <p className="text-[10px] text-slate-500 mb-2 font-medium">Website pemesanan terhubung otomatis.</p>
-            <button 
-              onClick={() => {
-                // Navigate to pesanan view
-                // This assumes Layout manages navigation, but we can't easily trigger it from here 
-                // unless we pass a handler. For now, it's a visual feedback.
-              }}
-              className="text-[10px] font-bold text-indigo-600 hover:indigo-700 hover:underline"
-            >
-              Cek Integrasi Pesanan →
-            </button>
+          
+          <div className="mt-6 pt-4 border-t border-slate-100 flex justify-center">
+             <button onClick={() => onNavigate?.('pemasaran')} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-1 outline-none">
+               Cari Tahu Strategi Marketing →
+             </button>
           </div>
         </div>
       </div>
@@ -443,3 +590,4 @@ export const Dashboard = () => {
 };
 
 const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
+

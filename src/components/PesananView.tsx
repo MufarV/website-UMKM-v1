@@ -65,9 +65,16 @@ export const PesananView = () => {
 
   useEffect(() => {
     const unsubOrders = firebaseService.subscribe('pesanan', (data) => {
-      // Sort by date desc
+      // Sort by entry time desc (newest first)
       const sorted = [...data].sort((a: any, b: any) => {
-        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        const getTime = (val: any) => {
+          if (!val) return 0;
+          if (val.toDate) return val.toDate().getTime();
+          if (val.seconds) return val.seconds * 1000;
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? 0 : d.getTime();
+        };
+        return getTime(b.createdAt) - getTime(a.createdAt);
       });
       setOrders(sorted);
     });
@@ -228,11 +235,24 @@ async function loadKatalogMenu() {
                 const poConfig = window.__poDatesConfig[selectedDate]?.mapValue?.fields;
                 selectJam.innerHTML = '';
                 if (poConfig && poConfig.times && poConfig.times.arrayValue.values) {
-                    poConfig.times.arrayValue.values.forEach(tOpt => {
+                    const timesArr = poConfig.times.arrayValue.values;
+                    const limitsArr = poConfig.limits?.arrayValue?.values || [];
+                    const bookedArr = (poConfig.booked?.arrayValue?.values || []);
+
+                    timesArr.forEach((tOpt, idx) => {
                        if (tOpt.stringValue) {
+                          const limit = parseInt(limitsArr[idx]?.integerValue || 0);
+                          const booked = parseInt(bookedArr[idx]?.integerValue || bookedArr[idx]?.doubleValue || 0);
+                          const sisa = limit > 0 ? Math.max(0, limit - booked) : -1;
+
                           const opt = document.createElement('option');
                           opt.value = tOpt.stringValue;
-                          opt.textContent = tOpt.stringValue;
+                          let text = tOpt.stringValue;
+                          if (limit > 0) {
+                              text += " (Batas: " + sisa + " pcs sisa)";
+                          }
+                          opt.textContent = text;
+                          if (sisa === 0) opt.disabled = true;
                           selectJam.appendChild(opt);
                        }
                     });
@@ -297,6 +317,7 @@ async function loadReviews() {
 // Menampilkan sisa slot per sesi waktu
 async function updateTampilanSlot(hari, jam) {
     const el = document.getElementById('info_slot');
+    const selectPcs = document.getElementById('input_pcs');
     if (!el) return;
     el.innerText = "Mengecek slot...";
     
@@ -306,25 +327,46 @@ async function updateTampilanSlot(hari, jam) {
           const data = await res.json();
           const pConfig = data.fields?.poDatesConfig?.mapValue?.fields || {};
           let limit = 0;
+          let count = 0;
           if (pConfig[hari]) {
               const conf = pConfig[hari].mapValue.fields;
               const idx = (conf.times?.arrayValue?.values || []).map(v => v.stringValue).indexOf(jam);
-              if (idx !== -1) limit = parseInt(conf.limits?.arrayValue?.values[idx].integerValue || 0);
+              if (idx !== -1) {
+                  limit = parseInt(conf.limits?.arrayValue?.values[idx].integerValue || 0);
+                  const bookedArr = conf.booked?.arrayValue?.values || [];
+                  count = parseInt(bookedArr[idx]?.integerValue || bookedArr[idx]?.doubleValue || 0);
+              }
           }
           
-          if (limit > 0) {
-              const rp = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pesanan?pageSize=1000');
-              const pd = await rp.json();
-              let count = 0;
-              (pd.documents || []).forEach(d => {
-                  const df = d.fields;
-                  if (df && df.ownerId?.stringValue === '${uid}' && df.status?.stringValue !== 'Dibatalkan' && df.tanggal_po?.stringValue === hari && df.waktu_po?.stringValue === jam) {
-                      count += parseInt(df.totalPcs?.integerValue || df.totalPcs?.stringValue || df.totalPcs?.doubleValue || df.total_pcs?.integerValue || df.total_pcs?.stringValue || df.total_pcs?.doubleValue || 1);
-                  }
-              });
-              el.innerText = "Sisa Slot: " + Math.max(0, limit - count) + " pcs";
+          const produksi = limit > 0 ? limit : 0;
+          const pesanan = count > 0 ? count : 0;
+          const batasTersedia = produksi > 0 ? Math.max(0, produksi - pesanan) : -1;
+
+          if (produksi > 0) {
+              el.innerText = "Sisa Slot (Batas): " + batasTersedia + " pcs";
           } else {
-              el.innerText = "Slot tersedia";
+              el.innerText = "Slot tersedia (Tanpa Batas)";
+          }
+
+          // Otomatis update dropdown jumlah pcs jika ada elementnya
+          if (selectPcs) {
+              const currentVal = selectPcs.value;
+              selectPcs.innerHTML = '';
+              if (batasTersedia === 0) {
+                  const opt = document.createElement('option');
+                  opt.value = "0";
+                  opt.textContent = "Slot Penuh";
+                  selectPcs.appendChild(opt);
+              } else {
+                  const maxRange = batasTersedia === -1 ? 50 : batasTersedia;
+                  for (let i = 1; i <= maxRange; i++) {
+                      const opt = document.createElement('option');
+                      opt.value = i;
+                      opt.textContent = i + " pcs";
+                      selectPcs.appendChild(opt);
+                  }
+                  if (currentVal && parseInt(currentVal) <= maxRange) selectPcs.value = currentVal;
+              }
           }
       }
     } catch(e) { el.innerText = "Gagal cek slot"; }
@@ -340,11 +382,50 @@ async function kirimPesanan() {
   const selectHari = document.getElementById('select_hari');
   const selectJam = document.getElementById('select_jam');
   const selectMetode = document.getElementById('select_metode');
+  const selectPcs = document.getElementById('input_pcs');
   
   if (!inputNama || !selectHari || !selectJam) {
     alert("Terjadi kesalahan teknis: Element input tidak ditemukan.");
     return;
   }
+
+  const pesananPcs = selectPcs ? parseInt(selectPcs.value) : 1; 
+
+  // -- BACA DATA (SISA SLOT) UNTUK VERIFIKASI AKHIR --
+  try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.firestoreDatabaseId}/documents/pengaturan/pengaturan_toko');
+      if (res.ok) {
+          const data = await res.json();
+          const pConfig = data.fields?.poDatesConfig?.mapValue?.fields || {};
+          let produksi = 0;
+          let pesanan = 0;
+          let hari = selectHari.value;
+          let jam = selectJam.value;
+          
+          if (pConfig[hari]) {
+              const conf = pConfig[hari].mapValue.fields;
+              const idx = (conf.times?.arrayValue?.values || []).map(v => v.stringValue).indexOf(jam);
+              if (idx !== -1) {
+                  produksi = parseInt(conf.limits?.arrayValue?.values[idx].integerValue || 0);
+                  const bookedArr = conf.booked?.arrayValue?.values || [];
+                  pesanan = parseInt(bookedArr[idx]?.integerValue || bookedArr[idx]?.doubleValue || 0);
+              }
+          }
+          
+          if (produksi > 0) {
+              const batasTersedia = Math.max(0, produksi - pesanan); 
+              
+              if (pesananPcs > batasTersedia) {
+                  alert("Pemesanan Ditolak: Anda mencoba memesan " + pesananPcs + " pcs, tetapi sisa Batas yang tersedia saat ini hanya " + batasTersedia + " pcs.");
+                  return; 
+              }
+              if (pesananPcs <= 0) {
+                  alert("Jumlah pesanan tidak valid.");
+                  return;
+              }
+          }
+      }
+  } catch(e) { console.error("Gagal verifikasi slot:", e); }
 
   const dataPesanan = {
       fields: {
@@ -357,7 +438,7 @@ async function kirimPesanan() {
         paymentMethod: { stringValue: selectMetode ? selectMetode.value : "Transfer" },
         items: { stringValue: "Pesanan dari Website" }, // Custom: Bisa diisi detail item dari keranjang Anda
         totalHarga: { integerValue: "0" }, // Custom: Isi dengan total harga dari keranjang
-        totalPcs: { integerValue: "1" }     // Custom: Isi dengan total pcs dari keranjang
+        totalPcs: { integerValue: String(pesananPcs) } // Custom: Isi dengan total pcs dari keranjang
       }
   };
 
@@ -657,12 +738,6 @@ async function kirimPesanan() {
         </div>
         <div className="flex gap-3 relative z-10 w-full md:w-auto">
           <button 
-            onClick={() => handleAddDemoData()}
-            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl font-black text-sm hover:bg-emerald-100 transition-all shadow-xl shadow-slate-200/50"
-          >
-            <Database className="w-4 h-4" /> DATA DEMO
-          </button>
-          <button 
             onClick={() => setShowIntegrationModal(true)}
             className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-4 bg-white text-indigo-600 border border-indigo-100 rounded-2xl font-black text-sm hover:bg-slate-50 transition-all shadow-xl shadow-slate-200/50"
           >
@@ -842,9 +917,36 @@ async function kirimPesanan() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-800 text-nowrap">{order.tanggal_po || order.date || order.tanggal || (order.createdAt ? new Date(order.createdAt).toLocaleDateString('id-ID') : '-')}</span>
-                        <span className="text-[10px] font-medium text-slate-500">{order.waktu_po || order.time || order.jam || (order.createdAt ? new Date(order.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-')}</span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Jadwal PO</span>
+                          <span className="text-xs font-bold text-slate-800 text-nowrap">
+                            {order.tanggal_po || order.date || order.tanggal || (order.createdAt ? (order.createdAt.toDate ? order.createdAt.toDate().toLocaleDateString('id-ID') : new Date(order.createdAt).toLocaleDateString('id-ID')) : '-')}
+                          </span>
+                          <span className="text-[10px] font-medium text-slate-500">
+                            {order.waktu_po || order.time || order.jam || (order.createdAt ? (order.createdAt.toDate ? order.createdAt.toDate().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : new Date(order.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })) : '-')}
+                          </span>
+                        </div>
+                        <div className="pt-1.5 border-t border-slate-50 flex flex-col">
+                          <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest leading-none mb-0.5 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span> Order Masuk
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                            {order.createdAt ? (
+                              (() => {
+                                const d = order.createdAt.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                                return isNaN(d.getTime()) ? '-' : d.toLocaleString('id-ID', { 
+                                  day: 'numeric', 
+                                  month: 'short', 
+                                  year: 'numeric',
+                                  hour: '2-digit', 
+                                  minute: '2-digit',
+                                  second: '2-digit'
+                                });
+                              })()
+                            ) : '-'}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-4">
@@ -928,37 +1030,59 @@ async function kirimPesanan() {
                   </p>
                 </div>
 
-                <div className="flex justify-between items-end">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Waktu PO & Pembayaran</p>
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                      <span>{order.tanggal_po || order.date || '-'}</span>
-                      <span className="text-slate-300">•</span>
-                      <span>{order.paymentMethod || order.payment || order.metode_pembayaran || '-'}</span>
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-end gap-2">
+                    <div className="space-y-2 flex-1">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Jadwal PO & Bayar</p>
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                          <span>{order.tanggal_po || order.date || '-'}</span>
+                          <span className="text-slate-300">•</span>
+                          <span>{order.paymentMethod || order.payment || order.metode_pembayaran || '-'}</span>
+                        </div>
+                      </div>
+                      <div className="pt-1.5 border-t border-slate-50">
+                        <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-0.5 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span> Order Masuk:
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-600">
+                          {order.createdAt ? (
+                            (() => {
+                              const d = order.createdAt.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                              return isNaN(d.getTime()) ? '-' : d.toLocaleString('id-ID', { 
+                                day: 'numeric', 
+                                month: 'short', 
+                                hour: '2-digit', 
+                                minute: '2-digit'
+                              });
+                            })()
+                          ) : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total</p>
+                      <p className="text-sm font-black text-indigo-600">
+                        {order.totalHarga ? `Rp ${order.totalHarga.toLocaleString('id-ID')}` 
+                         : order['Harga total'] ? `Rp ${Number(order['Harga total']).toLocaleString('id-ID')}`
+                         : order.total ? `Rp ${Number(order.total).toLocaleString('id-ID')}` : '-'}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total</p>
-                    <p className="text-sm font-black text-indigo-600">
-                      {order.totalHarga ? `Rp ${order.totalHarga.toLocaleString('id-ID')}` 
-                       : order['Harga total'] ? `Rp ${Number(order['Harga total']).toLocaleString('id-ID')}`
-                       : order.total ? `Rp ${Number(order.total).toLocaleString('id-ID')}` : '-'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <button onClick={() => handleEditClick(order)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit Pesanan">
-                      <Edit2 className="w-4 h-4" />
+                  <div className="flex items-center gap-2 pt-3 border-t border-slate-50">
+                    <button onClick={() => handleEditClick(order)} className="flex-1 flex items-center justify-center gap-2 py-2 text-slate-600 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all text-xs font-bold border border-slate-100" title="Edit Pesanan">
+                      <Edit2 className="w-4 h-4" /> Edit
                     </button>
                     <button 
                       onClick={() => handleDeleteOrder(order.id)} 
                       className={cn(
-                        "p-2 rounded-lg transition-colors flex items-center gap-1",
-                        confirmDeleteId === order.id ? "bg-rose-500 text-white hover:bg-rose-600 px-3" : "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all text-xs font-bold border",
+                        confirmDeleteId === order.id ? "bg-rose-500 text-white border-rose-400" : "text-slate-600 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 border-slate-100"
                       )}
                       title="Hapus Pesanan"
                     >
                       <Trash2 className="w-4 h-4" />
-                      {confirmDeleteId === order.id && <span className="text-xs font-bold">Hapus?</span>}
+                      {confirmDeleteId === order.id ? "Hapus?" : "Hapus"}
                     </button>
                   </div>
                 </div>
@@ -1105,7 +1229,7 @@ async function kirimPesanan() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Tanggal PO</label>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Tanggal Pesanan</label>
                     <select
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
                       value={orderForm.tanggal_po}
@@ -1209,13 +1333,13 @@ async function kirimPesanan() {
                     </pre>
                   </div>
                 </div>
-                
-                <div className="mt-6 space-y-3 bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
+                             <div className="mt-6 space-y-3 bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
                    <h4 className="font-bold text-indigo-900 text-sm">Cara Pemasangan:</h4>
                    <ol className="text-sm font-medium text-indigo-700 space-y-2 list-decimal list-inside">
                      <li>Salin kode di atas.</li>
                      <li>Tempelkan kode di dalam tag <code className="bg-white/60 px-1 font-bold rounded">{'<head>'}</code> atau sebelum <code className="bg-white/60 px-1 font-bold rounded">{'</body>'}</code> di website Anda.</li>
                      <li>Sesuaikan <strong>ID dari Form & Input</strong> yang ada di website Anda dengan baris kode <i>document.getElementById(...)</i>.</li>
+                     <li>Gunakan ID <code className="bg-white/60 px-1 font-bold rounded">input_pcs</code> (dropdown/select) jika ingin jumlah pcs dibatasi otomatis oleh data Batas Sesi PO.</li>
                      <li>Panggil fungsi <code className="bg-white/60 px-1 font-bold rounded">kirimPesanan()</code> pada tombol Beli, contoh: <br/><code className="text-xs bg-slate-800 text-teal-400 px-2 py-1 rounded inline-block mt-1">{'<button onclick="kirimPesanan()">Beli Sekarang</button>'}</code></li>
                    </ol>
                 </div>
